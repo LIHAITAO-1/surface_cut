@@ -25,6 +25,11 @@ namespace Mesh_Loader {
         int *pointList;
     };
 
+    struct Edge {
+        int numberOfPoints = 2; //2表示线段
+        int *pointList;
+    };
+
     template<typename T>
     struct DataArray {
         //std::string type_name;
@@ -38,6 +43,9 @@ namespace Mesh_Loader {
 
         int numberOfCell = 0;
         Cell *cellList = nullptr;
+
+        int numberOfEdge = 0;
+        Edge *edgeList = nullptr;
 
         std::map<std::string, DataArray<std::string>> cellDataString;
         std::map<std::string, DataArray<double>> cellDataDouble;
@@ -63,9 +71,14 @@ namespace Mesh_Loader {
             return (Mesh_Loader::Cell *) malloc(sizeof(Mesh_Loader::Cell) * number_cell);
         }
 
+        static Mesh_Loader::Edge *malloc_edge(int number_edge) {
+            return (Mesh_Loader::Edge *) malloc(sizeof(Mesh_Loader::Edge) * number_edge);
+        }
+
         FileData() {
             pointList = nullptr;
             cellList = nullptr;
+            edgeList = nullptr;
         }
 
         void set_point_number(int number_point) {
@@ -80,6 +93,13 @@ namespace Mesh_Loader {
                 assert(false);
             numberOfCell = number_cell;
             cellList = malloc_cell(number_cell);
+        }
+
+        void set_edge_number(int number_edge) {
+            if (edgeList != nullptr)
+                assert(false);
+            numberOfCell = number_edge;
+            edgeList = malloc_edge(number_edge);
         }
 
         ~FileData() {

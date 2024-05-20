@@ -691,6 +691,7 @@ namespace base_type {
 
             data.set_point_number(vertex_pool.size());
             data.set_cell_number(face_pool.size());
+//            data.set_edge_number(edge_pool.size());
 
             for (int j = 0; j < vertex_pool.size(); j++) {
                 const auto &vtx = (Vertex *) vertex_pool[j];
@@ -711,6 +712,16 @@ namespace base_type {
                 data.cellList[j].pointList[1] = f->p2->static_index;
                 data.cellList[j].pointList[2] = f->p3->static_index;
             }
+
+//            for (int j = 0; j < edge_pool.size(); j++) {
+//                const auto &f = (Edge *) face_pool[j];
+//
+//                data.edgeList[j].pointList = new int[2];
+//                data.edgeList[j].numberOfPoints = 2;
+//
+//                data.edgeList[j].pointList[0] = f->orig->static_index;
+//                data.edgeList[j].pointList[1] = f->end->static_index;
+//            }
 
 
             auto full_path = path_join(save_path, save_name + ".vtu");

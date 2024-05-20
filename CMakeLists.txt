@@ -67,7 +67,9 @@ if (BUILD_LIB)
     add_library(tetgeo SHARED ${SOURCE_FILES})
 else ()
 
-    add_executable(tetgeo ${SOURCE_FILES})
+    add_executable(tetgeo ${SOURCE_FILES}
+            "src/pipeline/run pipeline/TriIntersectionTri.h"
+            "src/pipeline/run pipeline/TriIntersectionTri.cpp")
 
 endif ()
 

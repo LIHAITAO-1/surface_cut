@@ -28,6 +28,8 @@
 #include <vtksys/SystemTools.hxx>
 #include <vtkTetra.h>
 #include <vtkTriangle.h>
+#include <vtkLine.h>
+#include <vtkVertex.h>
 #include <vtkStringArray.h>
 #include <vtkDoubleArray.h>
 #include <vtkFloatArray.h>
@@ -197,6 +199,8 @@ namespace Mesh_Loader {
 
     bool save_vtu(const char *out_file_path, const FileData &data) {
         vtkNew<vtkPoints> points;
+        vtkNew<vtkLine> line;
+        vtkNew<vtkVertex> vertex;
         vtkNew<vtkTetra> tetra;
         vtkNew<vtkTriangle> triangle;
         vtkNew<vtkCellArray> cellArray;
@@ -224,7 +228,18 @@ namespace Mesh_Loader {
                 triangle->GetPointIds()->SetId(2, cell.pointList[2]);
                 cellArray->InsertNextCell(triangle);
                 celltypes->SetValue(i, VTK_TRIANGLE);
-            } else {
+            } else if (cell.numberOfPoints == 2) {
+                line->GetPointIds()->SetId(0, cell.pointList[0]);
+                line->GetPointIds()->SetId(1, cell.pointList[1]);
+                cellArray->InsertNextCell(line);
+                celltypes->SetValue(i, VTK_LINE);
+            }
+            else if (cell.numberOfPoints == 1) {
+                vertex->GetPointIds()->SetId(0, cell.pointList[0]);
+                cellArray->InsertNextCell(vertex);
+                celltypes->SetValue(i, VTK_VERTEX);
+            }
+            else{
                 ASSERT_MSG(false, "ERROR: unsupport input");
             }
         }
