@@ -98,7 +98,7 @@ namespace Mesh_Loader {
         void set_edge_number(int number_edge) {
             if (edgeList != nullptr)
                 assert(false);
-            numberOfCell = number_edge;
+            numberOfEdge = number_edge;
             edgeList = malloc_edge(number_edge);
         }
 
@@ -116,6 +116,16 @@ namespace Mesh_Loader {
 
                 free(cellList);
                 cellList = nullptr;
+            }
+            if (numberOfEdge > 0 && edgeList != nullptr) {
+
+                for (int i = 0; i < numberOfEdge; i++) {
+                    auto &edge = edgeList[i];
+                    delete (edge.pointList);
+                }
+
+                free(edgeList);
+                edgeList = nullptr;
             }
         }
 

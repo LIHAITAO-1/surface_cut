@@ -23,9 +23,24 @@
 
 using namespace base_type;
 
+struct segment{
+    Vector3 p1;
+    Vector3 p2;
+    segment(const Vector3& a, const Vector3& b) : p1(a), p2(b){};
+    segment() = default;
+};
+
+struct Line3d {
+    Vector3 p1;
+    Vector3 p2;
+    Line3d(const Vector3& a, const Vector3& b) : p1(a), p2(b){};
+    Line3d() = default;
+};
+
 class Triangle
 {
 public:
+    Triangle() = default;
     Triangle(Vector3 pt0, Vector3 pt1, Vector3 pt2) : m_pt {pt0, pt1, pt2}
     {
         auto vecPt0TPt1 = pt1 - pt0;
@@ -71,3 +86,7 @@ bool CheckPtOnTriangle(const Triangle& tri, const Vector3& pt);
 IntersectionType GetIntersectionPoints(const Triangle& triPlane, const Triangle& triPoints, std::vector<Vector3>& pts);
 
 void TriIntersectTestCase();
+
+bool ComputeLineWithTwoTriangle(const Triangle& tri1, const Triangle& tri2, std::vector<Vector3>& pts);
+
+bool ParallelJudgment(const Vector3& v1, const Vector3& v2);

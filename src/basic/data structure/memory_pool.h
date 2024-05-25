@@ -1,23 +1,24 @@
 #pragma once
 
 #include <cstdlib>
-
+#include <assert.h>
 
 class MemoryPool {
 public:
-    void *firstBlock;
-    void *nowBlock;
-    void *nextItem;
-    void *deadItemStack;
-    void *pathBlock;
-    void *pathItem;
+    void* firstBlock;
+    void* nowBlock;
+    void* nextItem;
+    void* deadItemStack;
+    void* pathBlock;
+    void* pathItem;
     int alignBytes;
     int itemBytes, itemWords;
     int itemsPerBlock;
     long items, maxItems;
     int unallocatedItems;
     int pathItemsLeft;
-    const int itemoffset = sizeof(void *) + sizeof(bool);
+    int _byteCount, _wordSize, _alignment;
+    const int itemoffset = sizeof(void*) + sizeof(bool);
 
     MemoryPool() {
         firstBlock = nowBlock = nullptr;
@@ -40,8 +41,8 @@ public:
     ~MemoryPool() {
         if (firstBlock == nullptr)
             return;
-        while (*(void **) firstBlock != nullptr) {
-            nowBlock = *(void **) firstBlock;
+        while (*(void**)firstBlock != nullptr) {
+            nowBlock = *(void**)firstBlock;
             free(firstBlock);
             firstBlock = nowBlock;
         }
@@ -51,17 +52,21 @@ public:
 
 
     void initializePool(int byteCount, int itemCount, int wordSize, int alignment) {
+        _byteCount = byteCount;
+        _wordSize = wordSize;
+        _alignment = alignment;
 
         byteCount += itemoffset;
 
         if (alignment > wordSize) {
             alignBytes = alignment;
-        } else {
+        }
+        else {
             alignBytes = wordSize;
         }
 
-        if (sizeof(void *) > alignBytes) {
-            alignBytes = sizeof(void *);
+        if (sizeof(void*) > alignBytes) {
+            alignBytes = sizeof(void*);
         }
 
         int byteCount_align = (byteCount + alignBytes - 1) / alignBytes * alignBytes;
@@ -70,12 +75,12 @@ public:
         itemBytes = itemWords * wordSize;
         itemsPerBlock = itemCount;
 
-        firstBlock = malloc(itemsPerBlock * itemBytes + sizeof(void *)/*link to next block*/ + alignBytes);
+        firstBlock = malloc(itemsPerBlock * itemBytes + sizeof(void*)/*link to next block*/ + alignBytes);
         if (firstBlock == nullptr) {
             return; // Out of memory
         }
 
-        *(void **) firstBlock = nullptr;
+        *(void**)firstBlock = nullptr;
         restart();
     }
 
@@ -86,13 +91,13 @@ public:
         maxItems = 0;
 
         nowBlock = firstBlock;
-        alignPtr = (uintptr_t) ((void **) nowBlock + 1);
-        nextItem = (void *) (alignPtr + (uintptr_t) alignBytes - (alignPtr % (uintptr_t) alignBytes));
+        alignPtr = (uintptr_t)((void**)nowBlock + 1);
+        nextItem = (void*)(alignPtr + (uintptr_t)alignBytes - (alignPtr % (uintptr_t)alignBytes));
         unallocatedItems = itemsPerBlock;
         deadItemStack = nullptr;
     }
 
-    void *allocate() {
+    void* allocate() {
         //============================================================================//
         //                                                                            //
         // poolinit()    Initialize a pool of memory for allocation of items.         //
@@ -115,47 +120,48 @@ public:
         //   - sizeof(void *), so the stack of dead items can be maintained
         //       without unaligned accesses.
         dirty = true;
-        void *newItem;
-        void *newBlock;
+        void* newItem;
+        void* newBlock;
         uintptr_t alignPtr;
 
         if (deadItemStack != nullptr) {
             newItem = deadItemStack;
-            deadItemStack = *(void **) deadItemStack;
-        } else {
+            deadItemStack = *(void**)deadItemStack;
+        }
+        else {
             if (unallocatedItems == 0) {
-                if (*(void **) nowBlock == nullptr) {
-                    newBlock = malloc(itemsPerBlock * itemBytes + sizeof(void *) + alignBytes);
+                if (*(void**)nowBlock == nullptr) {
+                    newBlock = malloc(itemsPerBlock * itemBytes + sizeof(void*) + alignBytes);
                     if (newBlock == nullptr) {
                         return nullptr; // Out of memory
                     }
-                    *(void **) nowBlock = newBlock;
-                    *(void **) newBlock = nullptr;
+                    *(void**)nowBlock = newBlock;
+                    *(void**)newBlock = nullptr;
                 }
-                nowBlock = *(void **) nowBlock;
-                alignPtr = (uintptr_t) ((void **) nowBlock + 1);
-                nextItem = (void *) (alignPtr + (uintptr_t) alignBytes - (alignPtr % (uintptr_t) alignBytes));
+                nowBlock = *(void**)nowBlock;
+                alignPtr = (uintptr_t)((void**)nowBlock + 1);
+                nextItem = (void*)(alignPtr + (uintptr_t)alignBytes - (alignPtr % (uintptr_t)alignBytes));
                 unallocatedItems = itemsPerBlock;
             }
             newItem = nextItem;
-            nextItem = (void *) ((uintptr_t) nextItem + itemBytes);
+            nextItem = (void*)((uintptr_t)nextItem + itemBytes);
             unallocatedItems--;
             maxItems++;
         }
         items++;
 
-        bool *pNewItemBool = (bool *) ((uintptr_t) newItem + sizeof(void *));
+        bool* pNewItemBool = (bool*)((uintptr_t)newItem + sizeof(void*));
         *pNewItemBool = true;
-        return (void *) ((uintptr_t) newItem + itemoffset);
+        return (void*)((uintptr_t)newItem + itemoffset);
     }
 
-    void deallocate(void *dyingItem) {
-        auto pItem = (void *) ((uintptr_t) dyingItem - itemoffset);
-        bool *pItembool = (bool *) ((uintptr_t) pItem + sizeof(void *));
+    void deallocate(void* dyingItem) {
+        auto pItem = (void*)((uintptr_t)dyingItem - itemoffset);
+        bool* pItembool = (bool*)((uintptr_t)pItem + sizeof(void*));
         *pItembool = false;//mark as unavalibale
         dirty = true;
 
-        *((void **) pItem) = deadItemStack;
+        *((void**)pItem) = deadItemStack;
         deadItemStack = pItem;
         items--;
     }
@@ -170,12 +176,12 @@ public:
         //============================================================================//
         uintptr_t alignPtr;
         pathBlock = firstBlock;
-        alignPtr = (uintptr_t) ((void **) pathBlock + 1);
-        pathItem = (void *) (alignPtr + (uintptr_t) alignBytes - (alignPtr % (uintptr_t) alignBytes));
+        alignPtr = (uintptr_t)((void**)pathBlock + 1);
+        pathItem = (void*)(alignPtr + (uintptr_t)alignBytes - (alignPtr % (uintptr_t)alignBytes));
         pathItemsLeft = itemsPerBlock;
     }
 
-    void *traverse() {
+    void* traverse() {
         //============================================================================//
         //                                                                            //
         // traverse()   Find the next item in the list.                               //
@@ -188,7 +194,7 @@ public:
         //                                                                            //
         //============================================================================//
 
-        void *newItem;
+        void* newItem;
         uintptr_t alignPtr;
 
         if (pathItem == nextItem) {
@@ -196,27 +202,25 @@ public:
         }
 
         if (pathItemsLeft == 0) {
-            pathBlock = *(void **) pathBlock;
-            alignPtr = (uintptr_t) ((void **) pathBlock + 1);
-            pathItem = (void *) (alignPtr + (uintptr_t) alignBytes - (alignPtr % (uintptr_t) alignBytes));
+            pathBlock = *(void**)pathBlock;
+            alignPtr = (uintptr_t)((void**)pathBlock + 1);
+            pathItem = (void*)(alignPtr + (uintptr_t)alignBytes - (alignPtr % (uintptr_t)alignBytes));
             pathItemsLeft = itemsPerBlock;
         }
         newItem = pathItem;
-        pathItem = (void *) ((uintptr_t) pathItem + itemBytes);
+        pathItem = (void*)((uintptr_t)pathItem + itemBytes);
         pathItemsLeft--;
 
-        bool *newItemBool = (bool *) ((uintptr_t) newItem + sizeof(void *));
+        bool* newItemBool = (bool*)((uintptr_t)newItem + sizeof(void*));
         if (*newItemBool)
-            return (void *) ((uintptr_t) newItem + itemoffset);
+            return (void*)((uintptr_t)newItem + itemoffset);
         else
             return traverse();//return next
     }
 
-    void *operator[](const int index) {
-        assert(index >= 0);
-        assert(index < size());
+    void MultiThreadIndexInit() {
         if (index_array == nullptr) {
-            index_array = (void **) malloc(items * sizeof(void *));
+            index_array = (void**)malloc(items * sizeof(void*));
             traversalInit();
             auto loop = traverse();
             int idx = 0;
@@ -224,10 +228,55 @@ public:
                 index_array[idx++] = loop;
                 loop = traverse();
             }
-        } else if (dirty) {
+            dirty = false;
+        }
+        else if (dirty) {
             free(index_array);
 
-            index_array = (void **) malloc(items * sizeof(void *));
+            index_array = (void**)malloc(items * sizeof(void*));
+            traversalInit();
+            auto loop = traverse();
+            int idx = 0;
+            while (loop != nullptr) {
+                index_array[idx++] = loop;
+                loop = traverse();
+            }
+            dirty = false;
+        }
+    }
+
+    void memoryPoolCopy(MemoryPool& pool_copy) {
+        //copy only alive object, this is a shallow copy
+        pool_copy.initializePool(_byteCount, itemsPerBlock, _wordSize, _alignment);
+        for (int i = 0; i < items; i++) {
+            void* ptr = pool_copy.allocate();
+            memcpy(ptr, index_array[i], itemBytes - itemoffset);
+        }
+    }
+
+    void getIndexArrayCopy(std::vector<void*>& index_array_copy) {
+        index_array_copy.resize(items);
+        for (int i = 0; i < items; i++) {
+            index_array_copy[i] = index_array[i];
+        }
+    }
+
+    void* operator[](const int index) {
+        if (index_array == nullptr) {
+            index_array = (void**)malloc(items * sizeof(void*));
+            traversalInit();
+            auto loop = traverse();
+            int idx = 0;
+            while (loop != nullptr) {
+                index_array[idx++] = loop;
+                loop = traverse();
+            }
+            dirty = false;
+        }
+        else if (dirty) {
+            free(index_array);
+
+            index_array = (void**)malloc(items * sizeof(void*));
             traversalInit();
             auto loop = traverse();
             int idx = 0;
@@ -245,7 +294,7 @@ public:
     }
 
 
-    int get_index(void *p) {
+    int get_index(void* p) {
         int res = 0;
         traversalInit();
         auto loop = traverse();
@@ -262,5 +311,5 @@ public:
 private:
     bool dirty = false;
 
-    void **index_array = nullptr;
+    void** index_array = nullptr;
 };

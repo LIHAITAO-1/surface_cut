@@ -529,6 +529,10 @@ namespace base_type {
         MemoryPool edge_pool;
         MemoryPool face_pool;
 
+        Triangle_Soup_Mesh(Triangle_Soup_Mesh& mesh){
+            this->file_path = mesh.file_path;
+            this->face_pool.memoryPoolCopy(mesh.face_pool);
+        }
         Triangle_Soup_Mesh() {
             vertex_pool.initializePool(sizeof(Vertex), 1000, 8, 32);
             edge_pool.initializePool(sizeof(Edge), 1000, 8, 32);
@@ -714,13 +718,13 @@ namespace base_type {
             }
 
 //            for (int j = 0; j < edge_pool.size(); j++) {
-//                const auto &f = (Edge *) face_pool[j];
+//                const auto &f = (Edge *) edge_pool[j];
 //
-//                data.edgeList[j].pointList = new int[2];
-//                data.edgeList[j].numberOfPoints = 2;
+//                data.cellList[j].pointList = new int[2];
+//                data.cellList[j].numberOfPoints = 2;
 //
-//                data.edgeList[j].pointList[0] = f->orig->static_index;
-//                data.edgeList[j].pointList[1] = f->end->static_index;
+//                data.cellList[j].pointList[0] = f->orig->static_index;
+//                data.cellList[j].pointList[1] = f->end->static_index;
 //            }
 
 

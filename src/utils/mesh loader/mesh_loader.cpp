@@ -207,11 +207,20 @@ namespace Mesh_Loader {
         vtkNew<vtkUnsignedCharArray> celltypes;
 
         celltypes->SetNumberOfComponents(1);
+        //celltypes->SetNumberOfValues(data.numberOfCell + data.numberOfEdge);
         celltypes->SetNumberOfValues(data.numberOfCell);
 
         for (int i = 0; i < data.numberOfPoints; i++) {
             points->InsertNextPoint(data.pointList[i * 3], data.pointList[i * 3 + 1], data.pointList[i * 3 + 2]);
         }
+
+//        for (int i = 0; i < data.numberOfEdge; i++){
+//            Edge &edge = data.edgeList[i];
+//            line->GetPointIds()->SetId(0, edge.pointList[0]);
+//            line->GetPointIds()->SetId(1, edge.pointList[1]);
+//            cellArray->InsertNextCell(line);
+//            celltypes->SetValue(i, VTK_LINE);
+//        }
 
         for (int i = 0; i < data.numberOfCell; i++) {
             Cell &cell = data.cellList[i];
