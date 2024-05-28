@@ -38,6 +38,15 @@ public:
         initializePool(byteCount, itemCount, wordSize, alignment);
     }
 
+    MemoryPool(MemoryPool& other) {
+        //copy only alive object, this is a shallow copy
+        other.initializePool(_byteCount, itemsPerBlock, _wordSize, _alignment);
+        for (int i = 0; i < items; i++) {
+            void* ptr = other.allocate();
+            memcpy(ptr, index_array[i], itemBytes - itemoffset);
+        }
+    }
+
     ~MemoryPool() {
         if (firstBlock == nullptr)
             return;
@@ -245,14 +254,7 @@ public:
         }
     }
 
-    void memoryPoolCopy(MemoryPool& pool_copy) {
-        //copy only alive object, this is a shallow copy
-        pool_copy.initializePool(_byteCount, itemsPerBlock, _wordSize, _alignment);
-        for (int i = 0; i < items; i++) {
-            void* ptr = pool_copy.allocate();
-            memcpy(ptr, index_array[i], itemBytes - itemoffset);
-        }
-    }
+
 
     void getIndexArrayCopy(std::vector<void*>& index_array_copy) {
         index_array_copy.resize(items);

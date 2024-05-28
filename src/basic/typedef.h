@@ -307,6 +307,26 @@ namespace base_type {
             return nullptr;
         }
 
+        static bool edge_equel(Edge* e1, Vertex *v1, Vertex *v2){
+            assert(e1 != nullptr && v1 != nullptr && v2 != nullptr);
+            if ((e1->orig == v1 && e1->end == v2) ||
+                (e1->orig == v2 && e1->end == v1) ){
+                return true;
+            }
+            return false;
+        }
+
+        static Edge* get_edge_from_two_vertex(Face *f, Vertex *v1, Vertex *v2){
+            if (f->disjoin_edge[0] == nullptr || f->disjoin_edge[1] == nullptr || f->disjoin_edge[2] == nullptr)
+                return nullptr;
+            if (edge_equel(f->disjoin_edge[0], v1, v2))
+                return f->disjoin_edge[0];
+            if (edge_equel(f->disjoin_edge[1], v1, v2))
+                return f->disjoin_edge[1];
+            if (edge_equel(f->disjoin_edge[2], v1, v2))
+                return f->disjoin_edge[2];
+        }
+
         static void face_swap(Face *f1, Face *f2) {
             static int times = 0;
             times++;
@@ -529,10 +549,13 @@ namespace base_type {
         MemoryPool edge_pool;
         MemoryPool face_pool;
 
-        Triangle_Soup_Mesh(Triangle_Soup_Mesh& mesh){
-            this->file_path = mesh.file_path;
-            this->face_pool.memoryPoolCopy(mesh.face_pool);
-        }
+//        Triangle_Soup_Mesh(Triangle_Soup_Mesh& mesh){
+//            this->file_path = mesh.file_path;
+//            MemoryPool a(mesh.face_pool);
+//            face_pool(a);
+//        }
+
+
         Triangle_Soup_Mesh() {
             vertex_pool.initializePool(sizeof(Vertex), 1000, 8, 32);
             edge_pool.initializePool(sizeof(Edge), 1000, 8, 32);
