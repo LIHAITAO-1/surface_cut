@@ -314,6 +314,24 @@ bool ComputeLineWithTwoTriangle(const Triangle& tri1, const Triangle& tri2, std:
     line = Line3d(tri2.m_pt[0], tri2.m_pt[2]);
     if (ComputePointWithLineAndTriangle(line, tri1, point)) pointArray.push_back(point);
 
+    //去重复值
+    if (pointArray.size() > 2)
+    {
+        Vector3 tmpv1 = pointArray[0];
+        Vector3 tmpv2;
+        for (int i = 1; i < pointArray.size(); i++)
+        {
+            if (tmpv1.distance(pointArray[i]) > EPSILON)
+            {
+                tmpv2 = pointArray[i];
+                break;
+            }
+        }
+        pointArray.clear();
+        pointArray.push_back(tmpv1);
+        pointArray.push_back(tmpv2);
+    }
+
     if (pointArray.size() == 2)
     {
         if (abs(pointArray[0].distance(pointArray[1])) < EPSILON)
