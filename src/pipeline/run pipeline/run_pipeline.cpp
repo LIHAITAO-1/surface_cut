@@ -17,6 +17,7 @@ void end_2_end() {
     //Step 1: 求曲面与网格体的交点，计算相交边缘（可能存在多个）
     logger().info("Step 1: Compute Point");
     Triangle_Soup_Mesh meshCube;
+    Triangle_Soup_Mesh meshCube2;
     Triangle_Soup_Mesh meshCurve;
     Triangle_Soup_Mesh meshResult;
     Triangle_Soup_Mesh meshCubeCut1;
@@ -24,9 +25,10 @@ void end_2_end() {
     vector<Triangle_Soup_Mesh> meshCubeCutArray;
 
     meshCube.load_from_file("D:/xmy/model/cube.obj");
+    meshCube2.load_from_file("D:/xmy/model/cube.obj");
     meshCurve.load_from_file("D:/xmy/model/curve2.obj");
 
-//    triangle_soup_surface_mesh_normal_fix(meshCube);
+    //triangle_soup_surface_mesh_normal_fix(meshCube);
 //    triangle_soup_surface_mesh_normal_fix(meshCurve);
     //这个方法可以修复网格的法向量，让法向量指向模型同一侧 法向量的朝向和三角形的三个点索引顺序有关，一般是满足右手法则
     //我教你怎么在paraview里面显示法向量
@@ -757,16 +759,16 @@ void end_2_end() {
 
     //step 1: use meshCurve to subdivide meshCube
     int curveSize = meshCurve.face_pool.size();
-//    for (int i = 0; i < 1; i++) {
-//        auto f = (base_type::Face *) meshCurve.face_pool[i];
-//        insert_one_tri(meshCube, f);
-//    }
+    for (int i = 0; i < curveSize; i++) {
+        auto f = (base_type::Face *) meshCurve.face_pool[i];
+        insert_one_tri(meshCube, f);
+    }
 
-//    int cSize = meshCube.face_pool.size();
-//    for (int i = 0; i < cSize; i++) {
-//        auto f = (base_type::Face *) meshCube.face_pool[i];
-//        insert_one_tri(meshCurve, f);
-//    }
+    int cSize = meshCube2.face_pool.size();
+    for (int i = 0; i < cSize; i++) {
+        auto f = (base_type::Face *) meshCube2.face_pool[i];
+        insert_one_tri(meshCurve, f);
+    }
 
 
     //step 2: 拆分meshCube by spatial edge and vertex
@@ -799,35 +801,31 @@ void end_2_end() {
 //        }
 //
 //    };
-
+//    segArray.clear();
     Face *OneFace = (base_type::Face *) meshCube.face_pool[0];
 //    split_mesh(split_mesh, segArray, OneFace);
 
     clear_all_tri_mark(meshCube);
     stack<Face*> stackFace;
+    OneFace->mark = true;
     stackFace.push(OneFace);
+
     while(!stackFace.empty()){
         Face* topFace = stackFace.top();
-        stackFace.pop();
-        Face::allocate_from_pool(&meshCubeCut1.face_pool, topFace->p1, topFace->p2, topFace->p3);
-        topFace->mark = true;
 
-        if (edge_not_boundary(segArray, topFace->disjoin_edge[0])){
-            Face* tmp = Face::get_disjoin_face(topFace, topFace->disjoin_edge[0]);
-            if (!tmp->mark){
-                stackFace.push(tmp);
-            }
-        }
-        if (edge_not_boundary(segArray, topFace->disjoin_edge[1])){
-            Face* tmp = Face::get_disjoin_face(topFace, topFace->disjoin_edge[1]);
-            if (!tmp->mark){
-                stackFace.push(tmp);
-            }
-        }
-        if (edge_not_boundary(segArray, topFace->disjoin_edge[2])){
-            Face* tmp = Face::get_disjoin_face(topFace, topFace->disjoin_edge[2]);
-            if (!tmp->mark){
-                stackFace.push(tmp);
+        Vertex *v1 = Vertex::allocate_from_pool(&meshCubeCut1.vertex_pool, topFace->p1->position);
+        Vertex *v2 = Vertex::allocate_from_pool(&meshCubeCut1.vertex_pool, topFace->p2->position);
+        Vertex *v3 = Vertex::allocate_from_pool(&meshCubeCut1.vertex_pool, topFace->p3->position);
+        Face::allocate_from_pool(&meshCubeCut1.face_pool, v1, v2, v3);
+        stackFace.pop();
+
+        for (int j = 0; j < 3; j++){
+            if (edge_not_boundary(segArray, topFace->disjoin_edge[j])){
+                Face* tmp = Face::get_disjoin_face(topFace, topFace->disjoin_edge[j]);
+                if (!tmp->mark){
+                    stackFace.push(tmp);
+                    tmp->mark = true;
+                }
             }
         }
     }
