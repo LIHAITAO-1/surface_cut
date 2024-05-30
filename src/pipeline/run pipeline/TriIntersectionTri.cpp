@@ -250,6 +250,14 @@ void TriIntersectTestCase()
 const float EPSILON = std::numeric_limits<float>::epsilon();
 bool ComputePointWithLineAndTriangle(const Line3d& line, const Triangle& tri, Vector3& point)
 {
+//    if (InTriangle(tri, line.p1) != -1){
+//        point = line.p1;
+//        return true;
+//    }
+//    if (InTriangle(tri, line.p2) != -1){
+//        point = line.p2;
+//        return true;
+//    }
     Vector3 e0 = tri.m_pt[1] - tri.m_pt[0];
     Vector3 e1 = tri.m_pt[2] - tri.m_pt[0];
 

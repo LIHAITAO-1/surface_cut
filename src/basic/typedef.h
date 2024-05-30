@@ -37,6 +37,7 @@ namespace base_type {
         std::vector<Face *> *connect_face_array;
         std::vector<Edge *> *connect_edge_array;
         uint static_index;
+        bool special;
         int type;
         double data;
 
@@ -46,6 +47,7 @@ namespace base_type {
             v->connect_edge_array = new std::vector<Edge *>();
             v->connect_face_array = new std::vector<Face *>();
             v->static_index = pool->size() - 1;
+            v->special = false;
             v->type = 0;
             return v;
         }
@@ -57,6 +59,7 @@ namespace base_type {
             v->connect_edge_array = new std::vector<Edge *>();
             v->connect_face_array = new std::vector<Face *>();
             v->static_index = pool->size() - 1;
+            v->special = false;
             v->type = 0;
             return v;
         }
@@ -77,14 +80,14 @@ namespace base_type {
         Vertex *orig;
         Vertex *end;
         std::vector<Face *> *connect_face_array;
-        //for draw debug
-        bool draw_red = false;
+
+        bool special;
 
         static Edge *allocate_from_pool(MemoryPool *pool, Vertex *_orig, Vertex *_end) {
             auto e = (Edge *) pool->allocate();
             e->orig = _orig;
             e->end = _end;
-
+            e->special = false;
             _orig->connect_edge_array->push_back(e);
             _end->connect_edge_array->push_back(e);
 
@@ -106,6 +109,7 @@ namespace base_type {
             return false;
         }
 
+
         static bool is_connected(Edge *e1, Edge *e2) {
             if (e1->orig == e2->orig || e1->orig == e2->end) {
 
@@ -119,6 +123,35 @@ namespace base_type {
 
             return false;
         }
+
+        static void del_connect_face(Edge *e, Face *f) {
+            auto iter = std::find((*(e->connect_face_array)).begin(), (*(e->connect_face_array)).end(), f);
+            if (iter != (*(e->connect_face_array)).end())
+                (*(e->connect_face_array)).erase(iter);
+            else
+                assert(false);
+
+        }
+
+        static void add_connect_face(Edge *e, Face *f) {
+            auto iter = std::find((*(e->connect_face_array)).begin(), (*(e->connect_face_array)).end(), f);
+            if (iter == (*(e->connect_face_array)).end())
+
+                (*(e->connect_face_array)).push_back(f);
+            else
+                assert(false);
+        }
+
+        static Edge *find_edge(MemoryPool *pool, Vertex *v1, Vertex *v2) {
+            for (int i = 0; i < pool->size(); i++) {
+                Edge *e = (Edge *) (*pool)[i];
+                if ((e->orig == v1 || e->end == v1) && (e->orig == v2 || e->end == v2)) {
+                    return e;
+                }
+            }
+            return nullptr;
+        }
+
     };
 
     struct Face {
@@ -255,7 +288,10 @@ namespace base_type {
         }
 
         static Vertex *get_disjoin_face_no_share_vtx(Face *f1, Face *f2) {
-            assert(is_disjoin_face(f1, f2));
+            if (is_disjoin_face(f1, f2) == false) {
+                assert(false);
+            }
+
             bool b1 = f2->p1 == f1->p1 || f2->p1 == f1->p2 || f2->p1 == f1->p3;
             bool b2 = f2->p2 == f1->p1 || f2->p2 == f1->p2 || f2->p2 == f1->p3;
             bool b3 = f2->p3 == f1->p1 || f2->p3 == f1->p2 || f2->p3 == f1->p3;
@@ -292,6 +328,18 @@ namespace base_type {
             return n;
         }
 
+        static bool is_connected(Face *f, Edge *e) {
+            int i = 0;
+
+            if (e->orig == f->p1 || e->orig == f->p2 || e->orig == f->p3) {
+                i++;
+            }
+            if (e->end == f->p1 || e->end == f->p2 || e->end == f->p3) {
+                i++;
+            }
+            return i == 2;
+        }
+
         Vertex *get_vtx(int i) {
 
             if (i == 0)
@@ -307,16 +355,16 @@ namespace base_type {
             return nullptr;
         }
 
-        static bool edge_equel(Edge* e1, Vertex *v1, Vertex *v2){
+        static bool edge_equel(Edge *e1, Vertex *v1, Vertex *v2) {
             assert(e1 != nullptr && v1 != nullptr && v2 != nullptr);
             if ((e1->orig == v1 && e1->end == v2) ||
-                (e1->orig == v2 && e1->end == v1) ){
+                (e1->orig == v2 && e1->end == v1)) {
                 return true;
             }
             return false;
         }
 
-        static Edge* get_edge_from_two_vertex(Face *f, Vertex *v1, Vertex *v2){
+        static Edge *get_edge_from_two_vertex(Face *f, Vertex *v1, Vertex *v2) {
             if (f->disjoin_edge[0] == nullptr || f->disjoin_edge[1] == nullptr || f->disjoin_edge[2] == nullptr)
                 return nullptr;
             if (edge_equel(f->disjoin_edge[0], v1, v2))
@@ -618,6 +666,55 @@ namespace base_type {
             }
         }
 
+        Vertex *add_vtx(Vector3 p) {
+            auto find_same_vtx_in_pool = [](MemoryPool &pool, Vector3 p, int &index) -> Vertex * {
+                for (int i = 0; i < pool.size(); i++) {
+                    auto v = (Vertex *) pool[i];
+                    if (vector_length_sqr(p, v->position) < 1e-8) {
+                        index = i;
+                        return v;
+                    }
+
+                }
+                return nullptr;
+            };
+            int index;
+            Vertex *vtx_find = find_same_vtx_in_pool(vertex_pool, p, index);
+            if (vtx_find == nullptr) {
+                auto v = Vertex::allocate_from_pool(&vertex_pool, p);
+                return v;
+
+            }
+            return vtx_find;
+
+        }
+
+        Face *add_face(Vertex *v1, Vertex *v2, Vertex *v3) {
+            auto find_same_face_in_pool = [](MemoryPool &pool, Vertex *p1, Vertex *p2, Vertex *p3) -> Face * {
+                for (int i = 0; i < pool.size(); i++) {
+                    auto f = (Face *) pool[i];
+                    bool b1 = f->p1 == p1 || f->p1 == p2 || f->p1 == p3;
+                    bool b2 = f->p2 == p1 || f->p2 == p2 || f->p2 == p3;
+                    bool b3 = f->p3 == p1 || f->p3 == p2 || f->p3 == p3;
+                    if (b1 && b2 && b3)
+                        return f;
+                }
+                return nullptr;
+            };
+            Face *face_find = find_same_face_in_pool(face_pool, v1, v2, v3);
+
+            if (face_find == nullptr) {
+                assert(v1 != v2);
+                assert(v1 != v3);
+                assert(v2 != v3);
+
+
+                return Face::allocate_from_pool(&face_pool, v1, v2, v3);
+
+            }
+            return face_find;
+        }
+
         void load_from_file(std::string path, bool check_manifold_2 = false) {
             file_path = path;
             Mesh_Loader::FileData data;
@@ -717,7 +814,16 @@ namespace base_type {
             FileData data;
 
             data.set_point_number(vertex_pool.size());
-            data.set_cell_number(face_pool.size());
+
+            //find
+            int special_edge_num = 0;
+            for (int j = 0; j < edge_pool.size(); j++) {
+                auto e = (Edge *) edge_pool[j];
+                if (e->special)
+                    special_edge_num++;
+            }
+
+            data.set_cell_number(face_pool.size()+ special_edge_num);
 //            data.set_edge_number(edge_pool.size());
 
             for (int j = 0; j < vertex_pool.size(); j++) {
@@ -740,15 +846,19 @@ namespace base_type {
                 data.cellList[j].pointList[2] = f->p3->static_index;
             }
 
-//            for (int j = 0; j < edge_pool.size(); j++) {
-//                const auto &f = (Edge *) edge_pool[j];
-//
-//                data.cellList[j].pointList = new int[2];
-//                data.cellList[j].numberOfPoints = 2;
-//
-//                data.cellList[j].pointList[0] = f->orig->static_index;
-//                data.cellList[j].pointList[1] = f->end->static_index;
-//            }
+            int index = face_pool.size();
+
+            for (int j = 0; j < edge_pool.size(); j++) {
+                const auto &e = (Edge *) edge_pool[j];
+                if(e->special== false)
+                    continue;
+                data.cellList[index].pointList = new int[2];
+                data.cellList[index].numberOfPoints = 2;
+
+                data.cellList[index].pointList[0] = e->orig->static_index;
+                data.cellList[index].pointList[1] = e->end->static_index;
+                index++;
+            }
 
 
             auto full_path = path_join(save_path, save_name + ".vtu");

@@ -12,352 +12,214 @@ using namespace std;
 using namespace base_type;
 //using namespace Geometrical_Predicates;
 
+enum Vtx_state {
+    Inside,
+    OnEdge,
+    OnVtx
+};
+
+
+enum Tri_tri_cut_case {
+    P1_P2_Inside = 1,
+
+    P1_Inside_P2_OnEdge,
+    P1_OnEdge_P2_Inside,
+
+    P1_P2_OnEdge,
+
+    P1_OnVtx_P2_Inside,
+    P1_Inside_P2_OnVtx,
+
+    P1_OnVtx_P2_OnEdge,
+    P1_OnEdge_P2_OnVtx,
+
+    P1_P2_OnVtx,
+    No_Cut
+};
+
+struct Cut_result {
+    Tri_tri_cut_case cut_case;
+    Vertex *c_v[2];
+    Edge *c_e[2];
+};
 
 void end_2_end() {
-    //Step 1: 求曲面与网格体的交点，计算相交边缘（可能存在多个）
-    logger().info("Step 1: Compute Point");
-    Triangle_Soup_Mesh meshCube;
-    Triangle_Soup_Mesh meshCube2;
-    Triangle_Soup_Mesh meshCurve;
-    Triangle_Soup_Mesh meshResult;
-    Triangle_Soup_Mesh meshCubeCut1;
-    Triangle_Soup_Mesh meshCubeCut2;
-    vector<Triangle_Soup_Mesh> meshCubeCutArray;
-
-    meshCube.load_from_file("D:/xmy/model/cube.obj");
-    meshCube2.load_from_file("D:/xmy/model/cube.obj");
-    meshCurve.load_from_file("D:/xmy/model/curve2.obj");
-
-    //triangle_soup_surface_mesh_normal_fix(meshCube);
-//    triangle_soup_surface_mesh_normal_fix(meshCurve);
-    //这个方法可以修复网格的法向量，让法向量指向模型同一侧 法向量的朝向和三角形的三个点索引顺序有关，一般是满足右手法则
-    //我教你怎么在paraview里面显示法向量
-
-    Vertex *orig;
-    Vertex *end;
-    Vertex *tmp0, *tmp1, *tmp2;
-    Edge *edge;
-    Face *triCube;
-    Face *triCurve;
-    Face *addCube;
-    vector<Face *> CubeArray;
-    Face *f0;
-    Face *f1;
-    Face *f2;
-    Face *f2_0;
-    Face *f2_1;
-    Edge *e0_0;
-    Edge *e0_1;
-    Edge *e1_0;
-    Edge *e1_1;
-
-    vector<segment> segArray;
-    vector<segment> segArray2;
-
-    CubeArray.clear();
-    vector<Vector3> pts;
-
-    auto meshCut = [](Triangle_Soup_Mesh &mesh, Face *&face_mesh, Vertex *&orig, Face *&f0, Face *&f1, Face *&f2) {
-        Vertex *tmp0 = face_mesh->p1;
-        Vertex *tmp1 = face_mesh->p2;
-        Vertex *tmp2 = face_mesh->p3;
-
-        Edge *e0 = Edge::allocate_from_pool(&mesh.edge_pool, orig, tmp0);
-        Edge *e1 = Edge::allocate_from_pool(&mesh.edge_pool, orig, tmp1);
-        Edge *e2 = Edge::allocate_from_pool(&mesh.edge_pool, orig, tmp2);
-
-        f0 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp0, tmp1);
-        f1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp1, tmp2);
-        f2 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp2, tmp0);
-
-        e0->connect_face_array->push_back(f0);
-        e0->connect_face_array->push_back(f2);
-        e1->connect_face_array->push_back(f0);
-        e1->connect_face_array->push_back(f1);
-        e2->connect_face_array->push_back(f1);
-        e2->connect_face_array->push_back(f2);
-
-        Edge *ed0 = Face::get_edge_from_two_vertex(face_mesh, tmp0, tmp1);
-        Edge *ed1 = Face::get_edge_from_two_vertex(face_mesh, tmp1, tmp2);
-        Edge *ed2 = Face::get_edge_from_two_vertex(face_mesh, tmp2, tmp0);
-
-        f0->disjoin_edge[0] = ed0;
-        f0->disjoin_edge[1] = e1;
-        f0->disjoin_edge[2] = e0;
-        f1->disjoin_edge[0] = ed1;
-        f1->disjoin_edge[1] = e2;
-        f1->disjoin_edge[2] = e1;
-        f2->disjoin_edge[0] = ed2;
-        f2->disjoin_edge[1] = e0;
-        f2->disjoin_edge[2] = e2;
-
-
-        if ((*(ed0->connect_face_array))[0] == face_mesh) {
-            (*(ed0->connect_face_array))[0] = f0;
-        } else {
-            (*(ed0->connect_face_array))[1] = f0;
+    auto get_vtx_state = [](double a, double b) {
+        if ((a + b) < 1 - 1e-6 && a > 1e-6 && b > 1e-6) {
+            return Inside;
         }
-        if ((*(ed1->connect_face_array))[0] == face_mesh) {
-            (*(ed1->connect_face_array))[0] = f1;
-        } else {
-            (*(ed1->connect_face_array))[1] = f1;
-        }
-        if ((*(ed2->connect_face_array))[0] == face_mesh) {
-            (*(ed2->connect_face_array))[0] = f2;
-        } else {
-            (*(ed2->connect_face_array))[1] = f2;
+        if (abs(a) < 1e-6 || abs(b) < 1e-6 || abs((a + b) - 1) < 1e-6) {
+            return OnEdge;
         }
 
-        f0->mark = true;
-        f1->mark = true;
-        f2->mark = true;
-
-        mesh.face_pool.deallocate(face_mesh);
+        return OnVtx;
     };
 
-    auto meshCut2 = [](Triangle_Soup_Mesh &mesh, Face *&face_mesh, Vertex *&orig, Face *&f2_0, Face *&f2_1) {
-        Vertex *tmp0 = face_mesh->p1;
-        Vertex *tmp1 = face_mesh->p2;
-        Vertex *tmp2 = face_mesh->p3;
+    auto point_uv_calulate_triangle = [](Triangle3d tri, base_type::Vector3 intersection) -> std::pair<double, double> {
+        auto u = tri.p2 - tri.p1;
+        auto v = tri.p3 - tri.p1;
+        auto Q = tri.p1;
 
-        Edge *e0 = Edge::allocate_from_pool(&mesh.edge_pool, orig, tmp0);
-        Edge *e1 = Edge::allocate_from_pool(&mesh.edge_pool, orig, tmp1);
-        Edge *e2 = Edge::allocate_from_pool(&mesh.edge_pool, orig, tmp2);
+        base_type::Vector3 cvu = cross(u, v);
 
-        f2_0 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp0, tmp1);
-        f2_1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp0, tmp2);
+        base_type::Vector3 planar_hitpt_vector = intersection - Q;
+        auto w = cvu / dot(cvu, cvu);
+        auto alpha = dot(w, cross(planar_hitpt_vector, v));
+        auto beta = dot(w, cross(u, planar_hitpt_vector));
 
-        f2_0->mark = true;
-        f2_1->mark = true;
-
-        Face *disjoinface = Face::get_disjoin_face(face_mesh, Face::get_edge_from_two_vertex(face_mesh, tmp1, tmp2));
-        Vertex *nosharevtx = Face::get_disjoin_face_no_share_vtx(face_mesh, disjoinface);
-//        Edge *noshareedge1 = Face::get_non_share_edge(face_mesh, disjoinface).first;
-//        Edge *noshareedge2 = Face::get_non_share_edge(face_mesh, disjoinface).second;
-
-        Edge *e3 = Edge::allocate_from_pool(&mesh.edge_pool, orig, nosharevtx);
-        Face *f3_0 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp1, nosharevtx);
-        Face *f3_1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp2, nosharevtx);
-
-        e0->connect_face_array->push_back(f2_0);
-        e0->connect_face_array->push_back(f2_1);
-        e1->connect_face_array->push_back(f2_0);
-        e1->connect_face_array->push_back(f3_0);
-        e2->connect_face_array->push_back(f2_1);
-        e2->connect_face_array->push_back(f3_1);
-        e3->connect_face_array->push_back(f3_0);
-        e3->connect_face_array->push_back(f3_1);
-
-        Edge *ed0 = Face::get_edge_from_two_vertex(disjoinface, tmp1, nosharevtx);
-        Edge *ed1 = Face::get_edge_from_two_vertex(disjoinface, tmp2, nosharevtx);
-
-        f2_0->disjoin_edge[0] = Face::get_edge_from_two_vertex(face_mesh, tmp0, tmp1);
-        f2_0->disjoin_edge[1] = e1;
-        f2_0->disjoin_edge[2] = e0;
-        f2_1->disjoin_edge[0] = Face::get_edge_from_two_vertex(face_mesh, tmp0, tmp2);
-        f2_1->disjoin_edge[1] = e2;
-        f2_1->disjoin_edge[2] = e0;
-        f3_0->disjoin_edge[0] = ed0;
-        f3_0->disjoin_edge[1] = e3;
-        f3_0->disjoin_edge[2] = e1;
-        f3_1->disjoin_edge[0] = ed1;
-        f3_1->disjoin_edge[1] = e3;
-        f3_1->disjoin_edge[2] = e2;
-
-        if ((*(ed0->connect_face_array))[0] == disjoinface) {
-            (*(ed0->connect_face_array))[0] = f3_0;
-        } else {
-            (*(ed0->connect_face_array))[1] = f3_0;
-        }
-        if ((*(ed1->connect_face_array))[0] == disjoinface) {
-            (*(ed1->connect_face_array))[0] = f3_1;
-        } else {
-            (*(ed1->connect_face_array))[1] = f3_1;
-        }
-
-        mesh.face_pool.deallocate(face_mesh);
-        mesh.face_pool.deallocate(disjoinface);
+        return {alpha, beta};
     };
 
+    auto edge_split = [](Triangle_Soup_Mesh &mesh, base_type::Edge *e, const base_type::Vector3 &p) -> std::pair<Vertex *, std::array<Edge *, 2> > {
 
-    auto meshCut3 = [](Triangle_Soup_Mesh &mesh, Face *&face_mesh, Face *&cut_mesh1, Face *&cut_mesh2, Vertex *&orig,
-                       Vertex *&tmp, Edge *&e1, Edge *&e2) {
+        //     orig
+        //     /|\            /|\
+        //    / | \          / | \
+        //   /f1|f2\        /  |  \
+        //  /   |   \  ->  /___|___\
+        //  \   |   /      \   |   /
+        //   \  |  /        \  |  /
+        //    \ | /          \ | /
+        //     \|/            \|/
+        //     end
 
-        e1 = Edge::allocate_from_pool(&mesh.edge_pool, orig, face_mesh->p1);
-        e2 = Edge::allocate_from_pool(&mesh.edge_pool, orig, tmp);
+        Vertex *new_vtx = Vertex::allocate_from_pool(&mesh.vertex_pool, p);
 
-        Face *disjoinface = Face::get_disjoin_face(face_mesh,
-                                                   Face::get_edge_from_two_vertex(face_mesh, face_mesh->p1, tmp));
-        Vertex *nosharevtx = Face::get_disjoin_face_no_share_vtx(face_mesh, disjoinface);
+        base_type::Face *f1 = (*(e->connect_face_array))[0];
+        base_type::Face *f2 = (*(e->connect_face_array))[1];
 
-        Edge *e3 = Edge::allocate_from_pool(&mesh.edge_pool, orig, nosharevtx);
-        Face *f3_0 = Face::allocate_from_pool(&mesh.face_pool, orig, face_mesh->p1, nosharevtx);
-        Face *f3_1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp, nosharevtx);
+        Vertex *v_orig = e->orig;
+        Vertex *v_end = e->end;
 
-        e1->connect_face_array->push_back(cut_mesh1);
-        e1->connect_face_array->push_back(f3_0);
-        e2->connect_face_array->push_back(cut_mesh2);
-        e2->connect_face_array->push_back(f3_1);
-        e3->connect_face_array->push_back(f3_0);
-        e3->connect_face_array->push_back(f3_1);
+        Vertex *v_t1 = base_type::Face::get_disjoin_face_no_share_vtx(f2, f1);
+        Vertex *v_t2 = base_type::Face::get_disjoin_face_no_share_vtx(f1, f2);
 
-        Edge *ed0 = Face::get_edge_from_two_vertex(disjoinface, face_mesh->p1, nosharevtx);
-        Edge *ed1 = Face::get_edge_from_two_vertex(disjoinface, tmp, nosharevtx);
+//        Edge *e_t11 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_end)];
+        Edge *e_t12 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_orig)];
 
-        f3_0->disjoin_edge[0] = ed0;
-        f3_0->disjoin_edge[1] = e3;
-        f3_0->disjoin_edge[2] = e1;
-        f3_1->disjoin_edge[0] = ed1;
-        f3_1->disjoin_edge[1] = e3;
-        f3_1->disjoin_edge[2] = e2;
+//        Edge *e_t21 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_end)];
+        Edge *e_t22 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_orig)];
 
-        if ((*(ed0->connect_face_array))[0] == disjoinface) {
-            (*(ed0->connect_face_array))[0] = f3_0;
+        //new
+        Face *new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
+        Face *new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t2, v_end, new_vtx);
+
+        Edge *new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
+        Edge *new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
+        Edge *new_e2 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t2);
+
+        //change e
+        e->end = new_vtx;
+
+        //change f1 and f2
+        Face::set_vtx(f1, new_vtx, Face::get_vtx_index(f1, v_end));
+        Face::set_vtx(f2, new_vtx, Face::get_vtx_index(f2, v_end));
+
+        f1->disjoin_edge[Face::get_vtx_index(f1, v_orig)] = new_e1;
+        f2->disjoin_edge[Face::get_vtx_index(f2, v_orig)] = new_e2;
+
+        //change new face and edge
+        (*(new_e0->connect_face_array)).push_back(new_f1);
+        (*(new_e0->connect_face_array)).push_back(new_f2);
+        (*(new_e1->connect_face_array)).push_back(f1);
+        (*(new_e1->connect_face_array)).push_back(new_f1);
+        (*(new_e2->connect_face_array)).push_back(f2);
+        (*(new_e2->connect_face_array)).push_back(new_f2);
+
+        new_f1->disjoin_edge[0] = new_e0;
+        new_f2->disjoin_edge[0] = new_e0;
+        new_f1->disjoin_edge[1] = new_e1;
+        new_f2->disjoin_edge[1] = new_e2;
+        new_f1->disjoin_edge[2] = e_t12;
+        new_f2->disjoin_edge[2] = e_t22;
+
+        Edge::del_connect_face(e_t12, f1);
+        Edge::del_connect_face(e_t22, f2);
+        Edge::add_connect_face(e_t12, new_f1);
+        Edge::add_connect_face(e_t22, new_f2);
+
+        std::array<Edge *, 2> new_edge({new_e0, e});
+
+        return {new_vtx, new_edge};
+    };
+
+    auto tri_split = [get_vtx_state, point_uv_calulate_triangle](Triangle_Soup_Mesh &mesh, base_type::Face *f, base_type::Vector3 &p) {
+        double alpha, beta;
+
+        std::tie(alpha, beta) = point_uv_calulate_triangle({f->p1->position, f->p2->position, f->p3->position}, p);
+        Vtx_state vtx_state = get_vtx_state(alpha, beta);
+
+        if (vtx_state == OnEdge) {
+            //TODO:
+            assert(false);
+
+        } else if (vtx_state == Inside) {
+
+            Vertex *p1 = f->p1;
+            Vertex *p2 = f->p2;
+            Vertex *p3 = f->p3;
+
+            Edge *e1 = f->disjoin_edge[0];
+            Edge *e2 = f->disjoin_edge[1];
+            Edge *e3 = f->disjoin_edge[2];
+
+            //creat
+            Vertex *new_vtx = Vertex::allocate_from_pool(&mesh.vertex_pool, p);
+
+            Face *f1_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p2, p3);
+            Face *f2_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p1, p2);
+            Face *f3_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p3, p1);
+
+            Edge *e1_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p1);
+            Edge *e2_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p2);
+            Edge *e3_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p3);
+
+            //change
+            Edge::del_connect_face(e1, f);
+            Edge::del_connect_face(e2, f);
+            Edge::del_connect_face(e3, f);
+
+            Edge::add_connect_face(e1, f1_new);
+            Edge::add_connect_face(e2, f2_new);
+            Edge::add_connect_face(e3, f3_new);
+
+            Edge::add_connect_face(e1_new, f2_new);
+            Edge::add_connect_face(e1_new, f3_new);
+
+            Edge::add_connect_face(e2_new, f2_new);
+            Edge::add_connect_face(e2_new, f1_new);
+
+            Edge::add_connect_face(e3_new, f1_new);
+            Edge::add_connect_face(e3_new, f3_new);
+
+            f1_new->disjoin_edge[0] = e1;
+            f1_new->disjoin_edge[1] = e3_new;
+            f1_new->disjoin_edge[2] = e2_new;
+
+            f2_new->disjoin_edge[0] = e3;
+            f2_new->disjoin_edge[1] = e2_new;
+            f2_new->disjoin_edge[2] = e1_new;
+
+            f3_new->disjoin_edge[0] = e2;
+            f3_new->disjoin_edge[1] = e1_new;
+            f3_new->disjoin_edge[2] = e3_new;
+
+            //delete
+            mesh.face_pool.deallocate(f);
+
         } else {
-            (*(ed0->connect_face_array))[1] = f3_0;
+            assert(false);
         }
-        if ((*(ed1->connect_face_array))[0] == disjoinface) {
-            (*(ed1->connect_face_array))[0] = f3_1;
-        } else {
-            (*(ed1->connect_face_array))[1] = f3_1;
-        }
-
-        mesh.face_pool.deallocate(disjoinface);
     };
 
-
-    auto meshcut4 = [&meshCut3](Triangle_Soup_Mesh &mesh, Face *&face_mesh, Vertex *&orig, Vertex *&end) {
-        Face *f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, face_mesh->p1);
-        Face *f1 = Face::allocate_from_pool(&mesh.face_pool, orig, end, face_mesh->p2);
-        Face *f2 = Face::allocate_from_pool(&mesh.face_pool, end, face_mesh->p2, face_mesh->p3);
-
-        Edge *e0_0;
-        Edge *e0_1;
-        Edge *e1_0;
-        Edge *e1_1;
-
-        meshCut3(mesh, face_mesh, f0, f1, orig, face_mesh->p2, e0_0, e0_1);
-        meshCut3(mesh, face_mesh, f0, f2, end, face_mesh->p3, e1_0, e1_1);
-
-        Edge *e0 = Edge::allocate_from_pool(&mesh.edge_pool, orig, end);
-        Edge *e1 = Edge::allocate_from_pool(&mesh.edge_pool, end, face_mesh->p2);
-
-        e0->connect_face_array->push_back(f0);
-        e0->connect_face_array->push_back(f1);
-        e1->connect_face_array->push_back(f1);
-        e1->connect_face_array->push_back(f2);
-
-        f0->disjoin_edge[0] = e0_0;
-        f0->disjoin_edge[1] = e0;
-        f0->disjoin_edge[2] = e1_0;
-        f1->disjoin_edge[0] = e0_1;
-        f1->disjoin_edge[1] = e1;
-        f1->disjoin_edge[2] = e0;
-        f2->disjoin_edge[0] = e1;
-        f2->disjoin_edge[1] = Face::get_edge_from_two_vertex(face_mesh, face_mesh->p2, face_mesh->p3);
-        f2->disjoin_edge[2] = e1_1;
-
-        f0->mark = true;
-        f1->mark = true;
-        f2->mark = true;
-
-        mesh.face_pool.deallocate(face_mesh);
-    };
-
-    int meshCubeSize = meshCube.face_pool.size();
-    for (int i = 0; i < meshCubeSize; i++) {
-        triCube = (Face *) meshCube.face_pool[i];
-
-        Vector3 pt0_Cube = Vector3(triCube->p1->position.x, triCube->p1->position.y, triCube->p1->position.z);
-        Vector3 pt1_Cube = Vector3(triCube->p2->position.x, triCube->p2->position.y, triCube->p2->position.z);
-        Vector3 pt2_Cube = Vector3(triCube->p3->position.x, triCube->p3->position.y, triCube->p3->position.z);
-        Triangle tri1 = Triangle(pt0_Cube, pt1_Cube, pt2_Cube);
-        for (int j = 0; j < meshCurve.face_pool.size(); j++) {
-            triCurve = (Face *) meshCurve.face_pool[j];
-            Vector3 pt0_Curve = Vector3(triCurve->p1->position.x, triCurve->p1->position.y, triCurve->p1->position.z);
-            Vector3 pt1_Curve = Vector3(triCurve->p2->position.x, triCurve->p2->position.y, triCurve->p2->position.z);
-            Vector3 pt2_Curve = Vector3(triCurve->p3->position.x, triCurve->p3->position.y, triCurve->p3->position.z);
-            Triangle tri2 = Triangle(pt0_Curve, pt1_Curve, pt2_Curve);
-            //if (GetIntersectionPoints(tri1, tri2, pts) == INTERSECTION && pts.size() == 2)
-            if (ComputeLineWithTwoTriangle(tri1, tri2, pts)) {
-//                CubeArray.push_back(triCube);
-                Vector3 p_result_1 = Vector3(pts[0].x, pts[0].y, pts[0].z);
-                Vector3 p_result_2 = Vector3(pts[1].x, pts[1].y, pts[1].z);
-                segment seg = segment(p_result_1, p_result_2);
-                segArray.push_back(seg);
-//                orig = Vertex::allocate_from_pool(&meshCube.vertex_pool, p_result_1);
-//                end = Vertex::allocate_from_pool(&meshCube.vertex_pool, p_result_2);
-//                Edge::allocate_from_pool(&meshCube.edge_pool, orig, end);
-
-                pts.clear();
-            }
-        }
-    }
-
-
-//    GEO::Mesh A;
-//    GEO_Proxy::get_geogram_mesh(meshCube, A);
-//
-//    GEO::MeshSurfaceIntersection I(A);
-//    I.intersect();
-//    I.remove_internal_shells();
-//    GEO::mesh_repair(A, GEO::MESH_REPAIR_DEFAULT2, 1e-5);
-//    GEO_Proxy::get_tri_mesh(meshCube, A);
-
-//    GEO::Mesh B;
-//    GEO_Proxy::get_geogram_mesh(meshCurve, B);
-//
-//    GEO::MeshSurfaceIntersection J(B);
-//    J.intersect();
-//    J.remove_internal_shells();
-//    GEO::mesh_repair(B, GEO::MESH_REPAIR_DEFAULT2, 1e-5);
-//    GEO_Proxy::get_tri_mesh(meshCurve, B);
-
-    logger().warn("Step 2: mesh cut");
-    {
-//        for (auto i = 0; i < mesh.face_pool.size(); i++) {
-//            auto f = (Face *) mesh.face_pool[i];
-//            double f_area = get_triangle_area({f->p1->position, f->p2->position, f->p3->position});
-//
-//        }
-//
-//        for (auto i = 0; i < meshCube.vertex_pool.size(); i++) {
-//            auto v = (Vertex *) meshCube.vertex_pool[i];
-//
-//
-//            if (i < 4) {
-//                v->type = 1;
-//            }
-//        }
-//
-//        Vertex *v = Vertex::allocate_from_pool(&mesh.vertex_pool, {1, 2, 3});
-//        Face *f = Face::allocate_from_pool(&mesh.face_pool, v, v, v);
-    }
-
-    ////xmy
-
-
-//    meshCube.face_pool
-//    meshCurve
-
-    auto face_to_tri = [](base_type::Face *f, Triangle &tri) {
-        Vector3 pt0_Cube = Vector3(f->p1->position.x, f->p1->position.y, f->p1->position.z);
-        Vector3 pt1_Cube = Vector3(f->p2->position.x, f->p2->position.y, f->p2->position.z);
-        Vector3 pt2_Cube = Vector3(f->p3->position.x, f->p3->position.y, f->p3->position.z);
-        tri = Triangle(pt0_Cube, pt1_Cube, pt2_Cube);
-    };
-
-    auto tri_tri_cut = [&](base_type::Face *f1, base_type::Face *f2, base_type::Vector3 &p1,
-                           base_type::Vector3 &p2) -> bool {
-        Triangle tri1, tri2;
-        face_to_tri(f1, tri1);
-        face_to_tri(f2, tri2);
+    auto tri_tri_cut = [&](base_type::Face *f1, base_type::Face *f2, base_type::Vector3 &p1, base_type::Vector3 &p2) -> bool {
+        Triangle tri1(f1->p1->position, f1->p2->position, f1->p3->position);
+        Triangle tri2(f2->p1->position, f2->p2->position, f2->p3->position);
 
         vector<Vector3> pts;
         if (ComputeLineWithTwoTriangle(tri1, tri2, pts)) {
             p1 = pts[0];
             p2 = pts[1];
-
             return true;
         } else
             return false;
@@ -370,476 +232,235 @@ void end_2_end() {
         }
     };
 
+    auto tri_mark = [](std::vector<Face *> &f_array) {
+        for (auto f: f_array) {
+            f->mark = true;
+        }
+    };
 
-    auto insert_one_tri = [&](Triangle_Soup_Mesh &mesh, base_type::Face *f) {
+    auto get_cut_result = [point_uv_calulate_triangle, get_vtx_state](base_type::Face *f_insert, const base_type::Vector3 &p1, const base_type::Vector3 &p2) -> Cut_result {
+
+        double alpha_p1, beta_p1;
+        double alpha_p2, beta_p2;
+        std::tie(alpha_p1, beta_p1) = point_uv_calulate_triangle({f_insert->p1->position, f_insert->p2->position, f_insert->p3->position}, p1);
+        std::tie(alpha_p2, beta_p2) = point_uv_calulate_triangle({f_insert->p1->position, f_insert->p2->position, f_insert->p3->position}, p2);
+
+        Cut_result cut_result;
+
+        Vtx_state p1_state = get_vtx_state(alpha_p1, beta_p1);
+        Vtx_state p2_state = get_vtx_state(alpha_p2, beta_p2);
+
+        // case 1 p1 and p2 inside f_mesh , split f_mesh
+        if (p1_state == Inside && p2_state == Inside) {
+            cut_result.cut_case = P1_P2_Inside;
+        } else if (p1_state == Inside && p2_state == OnEdge) {
+            cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+            cut_result.cut_case = P1_Inside_P2_OnEdge;
+        } else if (p1_state == OnEdge && p2_state == Inside) {
+            cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+            cut_result.cut_case = P1_OnEdge_P2_Inside;
+        } else if (p1_state == OnEdge && p2_state == OnEdge) {
+            cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+            cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+            cut_result.cut_case = P1_P2_OnEdge;
+        } else if (p1_state == OnVtx && p2_state == Inside) {
+            cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - alpha_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
+            cut_result.cut_case = P1_OnVtx_P2_Inside;
+        } else if (p1_state == Inside && p2_state == OnVtx) {
+            cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - alpha_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
+            cut_result.cut_case = P1_Inside_P2_OnVtx;
+        } else if (p1_state == OnVtx && p2_state == OnEdge) {
+            cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+            cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - alpha_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
+            cut_result.cut_case = P1_OnVtx_P2_OnEdge;
+        } else if (p1_state == OnEdge && p2_state == OnVtx) {
+            cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+            cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - alpha_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
+            cut_result.cut_case = P1_OnEdge_P2_OnVtx;
+        } else if (p1_state == OnVtx && p2_state == OnVtx) {
+            cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - alpha_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
+            cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - alpha_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
+            cut_result.cut_case = P1_P2_OnVtx;
+        } else {
+            assert(false);
+        }
+        return cut_result;
+    };
+
+    auto insert_one_tri = [&](Triangle_Soup_Mesh &mesh, base_type::Face *f_insert) {
         clear_all_tri_mark(mesh);
-        int cubeSize;
+
         insert_start:
-//        Triangle_Soup_Mesh tmpmesh(mesh);
-        cubeSize = mesh.face_pool.size();
-        for (int i = 0; i < cubeSize; i++) {
+        for (int i = 0; i < mesh.face_pool.size(); i++) {
+            if (i == 3)
+                int aaaa = 0;
+
             base_type::Face *f_mesh = (base_type::Face *) mesh.face_pool[i];
-            base_type::Vector3 p1;
-            base_type::Vector3 p2;
             if (f_mesh->mark == true) {
                 continue;
             } else {
                 f_mesh->mark = true;
             }
 
-            if (tri_tri_cut(f_mesh, f, p1, p2)) {
-                bool need_to_check_again = false;
-                Triangle tri1;
-                face_to_tri(f_mesh, tri1);
-
-                // case 1 p1 and p2 inside f_mesh
-                // split f_mesh , need_to_check_again = false
-                if (InTriangle(tri1, p1) == 1 && InTriangle(tri1, p2) == 1) {
-                    segment seg = segment(p1, p2);
-                    segArray2.push_back(seg);
-
-                    orig = Vertex::allocate_from_pool(&mesh.vertex_pool, p1);
-                    end = Vertex::allocate_from_pool(&mesh.vertex_pool, p2);
-                    meshCut(mesh, f_mesh, orig, f0, f1, f2);
-
-                    Face *tmpf0, *tmpf1, *tmpf2;
-                    Triangle tmpTri = Triangle(p1, tri1.m_pt[0], tri1.m_pt[1]);
-                    if (InTriangle(tmpTri, p2) == 1) {
-                        meshCut(mesh, f0, end, tmpf0, tmpf1, tmpf2);
-                        goto insert_start;
-                    }
-                    tmpTri = Triangle(p1, tri1.m_pt[1], tri1.m_pt[2]);
-                    if (InTriangle(tmpTri, p2) == 1) {
-                        meshCut(mesh, f1, end, tmpf0, tmpf1, tmpf2);
-                        goto insert_start;
-                    }
-                    tmpTri = Triangle(p1, tri1.m_pt[2], tri1.m_pt[0]);
-                    if (InTriangle(tmpTri, p2) == 1) {
-                        meshCut(mesh, f2, end, tmpf0, tmpf1, tmpf2);
-                        goto insert_start;
-                    }
-                }
-
-                // case 2 one of p1 and p2 on f_mesh's edge and the other inside f_mesh
-                // split f_mesh and disjoin tri , need_to_check_again = true
-
-                {
-                    Vector3 p_result_1, p_result_2;
-                    bool flag = false;
-                    if (InTriangle(tri1, p1) == 1 && InTriangle(tri1, p2) == 0) {
-                        p_result_1 = p1;
-                        p_result_2 = p2;
-                        flag = true;
-                    }
-                    if (InTriangle(tri1, p1) == 0 && InTriangle(tri1, p2) == 1) {
-                        p_result_1 = p2;
-                        p_result_2 = p1;
-                        flag = true;
-                    }
-                    if (flag) {
-                        segment seg = segment(p_result_1, p_result_2);
-                        segArray2.push_back(seg);
-
-                        orig = Vertex::allocate_from_pool(&mesh.vertex_pool, p_result_1);
-                        end = Vertex::allocate_from_pool(&mesh.vertex_pool, p_result_2);
-                        meshCut(mesh, f_mesh, orig, f0, f1, f2);
-
-                        Triangle tmpTri = Triangle(p_result_1, tri1.m_pt[0], tri1.m_pt[1]);
-                        if (InTriangle(tmpTri, p_result_2) == 0) {
-                            meshCut2(mesh, f0, end, f2_0, f2_1);
-                            goto insert_start;
-                        }
-                        tmpTri = Triangle(p_result_1, tri1.m_pt[1], tri1.m_pt[2]);
-                        if (InTriangle(tmpTri, p_result_2) == 0) {
-                            meshCut2(mesh, f1, end, f2_0, f2_1);
-                            goto insert_start;
-                        }
-                        tmpTri = Triangle(p_result_1, tri1.m_pt[2], tri1.m_pt[0]);
-                        if (InTriangle(tmpTri, p_result_2) == 0) {
-                            meshCut2(mesh, f2, end, f2_0, f2_1);
-                            goto insert_start;
-                        }
-                    }
-                }
-
-                //case 3 p1 and p2 on the edge of f_mesh
-                // split f_mesh  , need_to_check_again = true
-                {
-                    Vector3 p_result_1 = p1;
-                    Vector3 p_result_2 = p2;
-                    if (InTriangle(tri1, p_result_1) == 0 && InTriangle(tri1, p_result_2) == 0) {
-                        segment seg = segment(p_result_1, p_result_2);
-                        segArray2.push_back(seg);
-
-                        orig = Vertex::allocate_from_pool(&meshCube.vertex_pool, p_result_1);
-                        end = Vertex::allocate_from_pool(&meshCube.vertex_pool, p_result_2);
-
-                        // f_mesh->p1->position为顶点
-                        if ((ParallelJudgment(p_result_1 - f_mesh->p1->position,
-                                              f_mesh->p2->position - f_mesh->p1->position) &&
-                             ParallelJudgment(p_result_2 - f_mesh->p1->position,
-                                              f_mesh->p3->position - f_mesh->p1->position)) ||
-                            (ParallelJudgment(p_result_1 - f_mesh->p1->position,
-                                              f_mesh->p3->position - f_mesh->p1->position) &&
-                             ParallelJudgment(p_result_2 - f_mesh->p1->position,
-                                              f_mesh->p2->position - f_mesh->p1->position))) {
-
-                            meshcut4(mesh, f_mesh, orig, end);
-                            goto insert_start;
-                        }
-
-                        // f_mesh->p2->position为顶点
-                        if ((ParallelJudgment(p_result_1 - f_mesh->p2->position,
-                                              f_mesh->p3->position - f_mesh->p2->position) &&
-                             ParallelJudgment(p_result_2 - f_mesh->p2->position,
-                                              f_mesh->p1->position - f_mesh->p2->position)) ||
-                            (ParallelJudgment(p_result_1 - f_mesh->p2->position,
-                                              f_mesh->p1->position - f_mesh->p2->position) &&
-                             ParallelJudgment(p_result_2 - f_mesh->p2->position,
-                                              f_mesh->p3->position - f_mesh->p2->position))) {
-
-                            Vertex *tmp = f_mesh->p1;
-                            f_mesh->p1 = f_mesh->p3;
-                            f_mesh->p3 = f_mesh->p2;
-                            f_mesh->p2 = tmp;
-
-                            meshcut4(mesh, f_mesh, orig, end);
-                            goto insert_start;
-                        }
-
-                        // f_mesh->p3->position为顶点
-                        if ((ParallelJudgment(p_result_1 - f_mesh->p3->position,
-                                              f_mesh->p1->position - f_mesh->p3->position) &&
-                             ParallelJudgment(p_result_2 - f_mesh->p3->position,
-                                              f_mesh->p2->position - f_mesh->p3->position)) ||
-                            (ParallelJudgment(p_result_1 - f_mesh->p3->position,
-                                              f_mesh->p2->position - f_mesh->p3->position) &&
-                             ParallelJudgment(p_result_2 - f_mesh->p3->position,
-                                              f_mesh->p1->position - f_mesh->p3->position))) {
-
-                            Vertex *tmp = f_mesh->p1;
-                            f_mesh->p1 = f_mesh->p2;
-                            f_mesh->p2 = f_mesh->p3;
-                            f_mesh->p3 = tmp;
-                            meshcut4(mesh, f_mesh, orig, end);
-                            goto insert_start;
-                        }
-                    }
-                }
-
-                //case 4 one of p1 and p2 on f_mesh's vertex and the other inside f_mesh
-                {
-                    Vector3 p_result_1;
-                    Vector3 p_result_2;
-                    bool flag = false;
-                    if (InTriangle(tri1, p1) == 1 && InTriangle(tri1, p2) == 2) {
-                        p_result_1 = p1;
-                        p_result_2 = p2;
-                        flag = true;
-                    }
-                    if (InTriangle(tri1, p1) == 2 && InTriangle(tri1, p2) == 1) {
-                        p_result_1 = p2;
-                        p_result_2 = p1;
-                        flag = true;
-                    }
-                    if (flag) {
-                        orig = Vertex::allocate_from_pool(&mesh.vertex_pool, p_result_1);
-                        segment seg = segment(p_result_1, p_result_2);
-                        segArray2.push_back(seg);
-                        meshCut(mesh, f_mesh, orig, f0, f1, f2);
-                        goto insert_start;
-                    }
-                }
-
-                //case 5 one of p1 and p2 on f_mesh's vertex and the other on the edge of f_mesh
-                {
-                    Vector3 p_result_1;
-                    Vector3 p_result_2;
-                    bool flag = false;
-                    if (InTriangle(tri1, p1) == 0 && InTriangle(tri1, p2) == 2) {
-                        p_result_1 = p1;
-                        p_result_2 = p2;
-                        flag = true;
-                    }
-                    if (InTriangle(tri1, p1) == 2 && InTriangle(tri1, p2) == 0) {
-                        p_result_1 = p2;
-                        p_result_2 = p1;
-                        flag = true;
-                    }
-                    if (flag) {
-                        orig = Vertex::allocate_from_pool(&mesh.vertex_pool, p_result_1);
-                        segment seg = segment(p_result_1, p_result_2);
-                        segArray2.push_back(seg);
-                        // p2为顶点
-                        if (f_mesh->p2->position.distance(p_result_2) < 1e-6) {
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p3->position - f_mesh->p2->position)) {
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p1->position - f_mesh->p2->position)) {
-                                Vertex *tmp = f_mesh->p1;
-                                f_mesh->p1 = f_mesh->p3;
-                                f_mesh->p3 = tmp;
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p1->position - f_mesh->p3->position)) {
-                                Vertex *tmp = f_mesh->p1;
-                                f_mesh->p1 = f_mesh->p3;
-                                f_mesh->p3 = f_mesh->p2;
-                                f_mesh->p2 = tmp;
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                        }
-                        // p1为顶点
-                        if (f_mesh->p1->position.distance(p_result_2) < 1e-6) {
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p2->position - f_mesh->p1->position)) {
-                                Vertex *tmp = f_mesh->p2;
-                                f_mesh->p2 = f_mesh->p3;
-                                f_mesh->p3 = f_mesh->p1;
-                                f_mesh->p1 = tmp;
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p1->position - f_mesh->p3->position)) {
-                                Vertex *tmp = f_mesh->p2;
-                                f_mesh->p2 = f_mesh->p1;
-                                f_mesh->p1 = f_mesh->p3;
-                                f_mesh->p3 = tmp;
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p2->position - f_mesh->p3->position)) {
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                        }
-                        // p3为顶点
-                        if (f_mesh->p3->position.distance(p_result_2) < 1e-6) {
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p1->position - f_mesh->p2->position)) {
-                                Vertex *tmp = f_mesh->p2;
-                                f_mesh->p2 = f_mesh->p3;
-                                f_mesh->p3 = f_mesh->p1;
-                                f_mesh->p1 = tmp;
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p1->position - f_mesh->p3->position)) {
-                                Vertex *tmp = f_mesh->p2;
-                                f_mesh->p2 = f_mesh->p1;
-                                f_mesh->p1 = f_mesh->p3;
-                                f_mesh->p3 = tmp;
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                            if (ParallelJudgment(p_result_1 - p_result_2,
-                                                 f_mesh->p2->position - f_mesh->p3->position)) {
-                                meshCut2(mesh, f_mesh, orig, f2_0, f2_1);
-                                goto insert_start;
-                            }
-                        }
-//                        tmp0 = Vertex::allocate_from_pool(&mesh.vertex_pool, tri1.m_pt[0]);
-//                        tmp1 = Vertex::allocate_from_pool(&mesh.vertex_pool, tri1.m_pt[1]);
-//                        tmp2 = Vertex::allocate_from_pool(&mesh.vertex_pool, tri1.m_pt[2]);
-//                        //在0-1侧
-//                        if (ParallelJudgment(p_result_1 - p_result_2, tri1.m_pt[1] - tri1.m_pt[0]) && p_result_2.distance(tri1.m_pt[0]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp2);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp1, tmp2);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-//
-//                        if (ParallelJudgment(p_result_1 - p_result_2, tri1.m_pt[1] - tri1.m_pt[0]) && p_result_2.distance(tri1.m_pt[1]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp2);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp0, tmp2);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-//                        //在1-2侧
-//                        if (ParallelJudgment(p_result_1 - p_result_2, tri1.m_pt[2] - tri1.m_pt[1]) && p_result_2.distance(tri1.m_pt[1]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp0);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp0, tmp2);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-//
-//                        if (ParallelJudgment(p_result_1 - p_result_2, tri1.m_pt[2] - tri1.m_pt[1]) && p_result_2.distance(tri1.m_pt[2]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp0);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp0, tmp1);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-//                        //在0-2侧
-//                        if (ParallelJudgment(p_result_1 - p_result_2, tri1.m_pt[0] - tri1.m_pt[2]) && p_result_2.distance(tri1.m_pt[0]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp1);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp1, tmp2);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-//
-//                        if (ParallelJudgment(p_result_1 - p_result_2, tri1.m_pt[0] - tri1.m_pt[2]) && p_result_2.distance(tri1.m_pt[2]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp1);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, tmp0, tmp1);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-//                        // 顶点-对边
-//                        if (p_result_2.distance(tri1.m_pt[0]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp1);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp2);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-//
-//                        if (p_result_2.distance(tri1.m_pt[1]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp0);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp2);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-//
-//                        if (p_result_2.distance(tri1.m_pt[2]) < 1e-6){
-//                            f0 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp0);
-//                            f1 = Face::allocate_from_pool(&mesh.face_pool, orig, end, tmp1);
-//                            f0->mark = true;
-//                            f1->mark = true;
-//                            mesh.face_pool.deallocate(f_mesh);
-//                            goto insert_start;
-//                        }
-                    }
-                }
-
-                //case 6 both p1 and p2 on the vertex of f_mesh
-                {
-                    if (InTriangle(tri1, p1) == 2 && InTriangle(tri1, p2) == 2) {
-                        segment seg = segment(p1, p2);
-                        segArray2.push_back(seg);
-                        //goto insert_start;
-                        continue;
-                    }
-                }
-
-                logger().warn("Result Error!");
-                //end
-
-//                if (need_to_check_again) {
-//                    goto insert_start;
-//                } else {
-//                    break;
-//                }
+            base_type::Vector3 p1;
+            base_type::Vector3 p2;
+            if (!tri_tri_cut(f_mesh, f_insert, p1, p2)) {
+                continue;
             }
 
+            auto c_r = get_cut_result(f_mesh, p1, p2);
+
+            switch (c_r.cut_case) {
+                case P1_P2_Inside : {
+                    break;
+                }
+                case P1_Inside_P2_OnEdge:
+                case P1_OnEdge_P2_Inside: {
+                    break;
+                }
+
+                case P1_P2_OnEdge: {
+                    Vertex *new_v1, *new_v2;
+                    std::array<Edge *, 2> new_e1, new_e2;
+
+                    std::tie(new_v1, new_e1) = edge_split(mesh, c_r.c_e[0], p1);
+                    std::tie(new_v2, new_e2) = edge_split(mesh, c_r.c_e[1], p2);
+                    auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
+
+                    tri_mark(*(edge_find->connect_face_array));
+                    new_v1->special = true;
+                    new_v2->special = true;
+//                    new_e1[0]->special = c_r.c_e[0];
+//                    new_e1[1]->special = c_r.c_e[0];
+//
+//                    new_e2[0]->special = c_r.c_e[1];
+//                    new_e2[1]->special = c_r.c_e[1];
+
+                    break;
+                }
+
+                case P1_OnVtx_P2_Inside:
+                case P1_Inside_P2_OnVtx: {
+                    break;
+                }
+
+                case P1_OnVtx_P2_OnEdge: {
+                    Vertex *new_v;
+                    std::array<Edge *, 2> new_e;
+                    std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[1], p2);
+                    auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[0]);
+                    tri_mark(*(edge_find->connect_face_array));
+                    new_v->special = true;
+
+//                    new_e[0]->special = c_r.c_e[1];
+//                    new_e[1]->special = c_r.c_e[1];
+
+                    break;
+                }
+                case P1_OnEdge_P2_OnVtx: {
+                    Vertex *new_v;
+                    std::array<Edge *, 2> new_e;
+                    std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[0], p1);
+                    auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[1]);
+                    tri_mark(*(edge_find->connect_face_array));
+                    edge_find->special = true;
+                    new_v->special = true;
+//                    new_e[0]->special = c_r.c_e[0];
+//                    new_e[1]->special = c_r.c_e[0];
+
+                    break;
+                }
+
+                case P1_P2_OnVtx: {
+                    break;
+                }
+
+                case No_Cut: {
+                    break;
+                }
+                default:
+                    assert(false);
+            }
+
+            goto insert_start;
         }
     };
 
+    logger().info("Step 1: Compute Point");
+    Triangle_Soup_Mesh meshCube;
+    Triangle_Soup_Mesh meshCurve;
+
+    meshCube.load_from_file("D:/xmy/model/cube.obj");
+    meshCurve.load_from_file("D:/xmy/model/curve2.obj");
+
+
     //step 1: use meshCurve to subdivide meshCube
-    int curveSize = meshCurve.face_pool.size();
-    for (int i = 0; i < curveSize; i++) {
+
+    for (int i = 0; i < meshCurve.face_pool.size(); i++) {
         auto f = (base_type::Face *) meshCurve.face_pool[i];
         insert_one_tri(meshCube, f);
     }
 
-    int cSize = meshCube2.face_pool.size();
-    for (int i = 0; i < cSize; i++) {
-        auto f = (base_type::Face *) meshCube2.face_pool[i];
-        insert_one_tri(meshCurve, f);
+    meshCube.save("D:/xmy/model", "output");
+
+    for (int i = 0; i < meshCube.edge_pool.size(); i++) {
+        auto e = (Edge *) meshCube.edge_pool[i];
+        if (e->orig->special && e->end->special)
+            e->special = true;
     }
 
-
-    //step 2: 拆分meshCube by spatial edge and vertex
-
-    auto seg_equel_edge = [](segment &seg, Edge *&e) -> bool {
-        if (seg.p1.distance(e->orig->position) < 1e-6 && seg.p2.distance(e->end->position) < 1e-6)
-            return true;
-        if (seg.p2.distance(e->orig->position) < 1e-6 && seg.p1.distance(e->end->position) < 1e-6)
-            return true;
-        return false;
-    };
-
-    auto edge_not_boundary = [&seg_equel_edge](vector<segment> &segArray, Edge *&e) {
-        int count = 0;
-        for (int i = 0; i < segArray.size(); i++) {
-            if (seg_equel_edge(segArray[i], e)) {
-                count++;
-            }
+    //step 2: depart mesh by special edge
+    auto get_unmarked_face = [](Triangle_Soup_Mesh &mesh) -> Face * {
+        for (int i = 0; i < mesh.face_pool.size(); i++) {
+            base_type::Face *f = (base_type::Face *) mesh.face_pool[i];
+            if (f->mark == false)
+                return f;
         }
-        return count == 0;
+        return nullptr;
     };
-
-//    auto split_mesh = [&edge_not_boundary, &meshCubeCut1](auto &&split_mesh, vector<segment> &segArray, Face *OneFace) -> void {
-//
-//        Face::allocate_from_pool(&meshCubeCut1.face_pool, OneFace->p1, OneFace->p2, OneFace->p3);
-//        if (edge_not_boundary(segArray, OneFace)) {
-//            split_mesh(split_mesh, segArray, Face::get_disjoin_face(OneFace, 0));
-//            split_mesh(split_mesh, segArray, Face::get_disjoin_face(OneFace, 1));
-//            split_mesh(split_mesh, segArray, Face::get_disjoin_face(OneFace, 2));
-//        }
-//
-//    };
-//    segArray.clear();
-    Face *OneFace = (base_type::Face *) meshCube.face_pool[0];
-//    split_mesh(split_mesh, segArray, OneFace);
 
     clear_all_tri_mark(meshCube);
-    stack<Face*> stackFace;
-    OneFace->mark = true;
-    stackFace.push(OneFace);
 
-    while(!stackFace.empty()){
-        Face* topFace = stackFace.top();
+    auto unmarked_face = get_unmarked_face(meshCube);
+    int part_index = 0;
+    do {
+        std::vector<Face *> face_stack = {unmarked_face};
+        std::vector<Face *> face_array;
 
-        Vertex *v1 = Vertex::allocate_from_pool(&meshCubeCut1.vertex_pool, topFace->p1->position);
-        Vertex *v2 = Vertex::allocate_from_pool(&meshCubeCut1.vertex_pool, topFace->p2->position);
-        Vertex *v3 = Vertex::allocate_from_pool(&meshCubeCut1.vertex_pool, topFace->p3->position);
-        Face::allocate_from_pool(&meshCubeCut1.face_pool, v1, v2, v3);
-        stackFace.pop();
-
-        for (int j = 0; j < 3; j++){
-            if (edge_not_boundary(segArray, topFace->disjoin_edge[j])){
-                Face* tmp = Face::get_disjoin_face(topFace, topFace->disjoin_edge[j]);
-                if (!tmp->mark){
-                    stackFace.push(tmp);
-                    tmp->mark = true;
-                }
+        while (!face_stack.empty()) {
+            auto back = face_stack.back();
+            face_stack.pop_back();
+            back->mark = true;
+            face_array.push_back(back);
+            if (back->disjoin_edge[0]->special == false) {
+                auto f = Face::get_disjoin_face(back, back->disjoin_edge[0]);
+                if (!f->mark)
+                    face_stack.push_back(f);
+            }
+            if (back->disjoin_edge[1]->special == false) {
+                auto f = Face::get_disjoin_face(back, back->disjoin_edge[1]);
+                if (!f->mark)
+                    face_stack.push_back(f);
+            }
+            if (back->disjoin_edge[2]->special == false) {
+                auto f = Face::get_disjoin_face(back, back->disjoin_edge[2]);
+                if (!f->mark)
+                    face_stack.push_back(f);
             }
         }
-    }
 
-    logger().warn("Step 3: mesh save");
-    meshCube.save("D:/xmy/model/", "output");
-    meshCurve.save("D:/xmy/model/", "output2");
-    meshCubeCut1.save("D:/xmy/model/", "output3");
+        unmarked_face = get_unmarked_face(meshCube);
 
-    int a = 100;
-    double b = 200.5;
-    std::string log_content = std::format("i have vertex:{}, tet:{}", a, b);
-    logger().info(log_content);
-    logger().info(std::format("i have vertex:{}, tet:{}", a, b));
+        Triangle_Soup_Mesh part;
+
+        for (auto f: face_array) {
+            auto v1 = part.add_vtx(f->p1->position);
+            auto v2 = part.add_vtx(f->p2->position);
+            auto v3 = part.add_vtx(f->p3->position);
+            part.add_face(v1, v2, v3);
+        }
+        part.save("D:/xmy/model", "output_part" + std::to_string(part_index++));
+    } while (unmarked_face);
 
     logger().info("end");
 
