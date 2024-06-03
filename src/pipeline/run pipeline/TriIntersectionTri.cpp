@@ -250,14 +250,14 @@ void TriIntersectTestCase()
 const float EPSILON = std::numeric_limits<float>::epsilon();
 bool ComputePointWithLineAndTriangle(const Line3d& line, const Triangle& tri, Vector3& point)
 {
-//    if (InTriangle(tri, line.p1) != -1){
-//        point = line.p1;
-//        return true;
-//    }
-//    if (InTriangle(tri, line.p2) != -1){
-//        point = line.p2;
-//        return true;
-//    }
+    if (InTriangle(tri, line.p1) != -1){
+        point = line.p1;
+        return true;
+    }
+    if (InTriangle(tri, line.p2) != -1){
+        point = line.p2;
+        return true;
+    }
     Vector3 e0 = tri.m_pt[1] - tri.m_pt[0];
     Vector3 e1 = tri.m_pt[2] - tri.m_pt[0];
 
@@ -327,17 +327,21 @@ bool ComputeLineWithTwoTriangle(const Triangle& tri1, const Triangle& tri2, std:
     {
         Vector3 tmpv1 = pointArray[0];
         Vector3 tmpv2;
+        bool flagtmpv2 = false;
         for (int i = 1; i < pointArray.size(); i++)
         {
             if (tmpv1.distance(pointArray[i]) > EPSILON)
             {
                 tmpv2 = pointArray[i];
+                flagtmpv2 = true;
                 break;
             }
         }
         pointArray.clear();
         pointArray.push_back(tmpv1);
-        pointArray.push_back(tmpv2);
+        if (flagtmpv2){
+            pointArray.push_back(tmpv2);
+        }
     }
 
     if (pointArray.size() == 2)
@@ -453,8 +457,8 @@ int InTriangle(const Triangle& tri, const Vector3& pt)
     Vector3 Nor1 = N1.normalise();
     Vector3 Nor2 = N2.normalise();
 
-    if ((abs(Nor0.dot(Nor1) + 1) < EPSILON && abs(Nor0.dot(Nor2) + 1) < EPSILON) ||
-        (abs(Nor0.dot(Nor1) - 1) < EPSILON && abs(Nor0.dot(Nor2) - 1) < EPSILON))
+    if (abs(Nor0.dot(Nor1) - 1) < EPSILON && abs(Nor0.dot(Nor2) - 1) < EPSILON)
+//    if (Nor0 == Nor1 && Nor1 == Nor2)
     {
         return 1;
     }
