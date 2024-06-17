@@ -88,62 +88,124 @@ void end_2_end() {
 
         Vertex *new_vtx = Vertex::allocate_from_pool(&mesh.vertex_pool, p);
 
-        base_type::Face *f1 = (*(e->connect_face_array))[0];
-        base_type::Face *f2 = (*(e->connect_face_array))[1];
+        if (e->connect_face_array->size() == 2){
+            base_type::Face *f1 = (*(e->connect_face_array))[0];
+            base_type::Face *f2 = (*(e->connect_face_array))[1];
 
-        Vertex *v_orig = e->orig;
-        Vertex *v_end = e->end;
+            Vertex *v_orig = e->orig;
+            Vertex *v_end = e->end;
 
-        Vertex *v_t1 = base_type::Face::get_disjoin_face_no_share_vtx(f2, f1);
-        Vertex *v_t2 = base_type::Face::get_disjoin_face_no_share_vtx(f1, f2);
+            Vertex *v_t1 = base_type::Face::get_disjoin_face_no_share_vtx(f2, f1);
+            Vertex *v_t2 = base_type::Face::get_disjoin_face_no_share_vtx(f1, f2);
 
 //        Edge *e_t11 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_end)];
-        Edge *e_t12 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_orig)];
+            Edge *e_t12 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_orig)];
 
 //        Edge *e_t21 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_end)];
-        Edge *e_t22 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_orig)];
+            Edge *e_t22 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_orig)];
 
-        //new
-        Face *new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
-        Face *new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t2, v_end, new_vtx);
+            //new
+            Face *new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
+            Face *new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t2, v_end, new_vtx);
 
-        Edge *new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
-        Edge *new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
-        Edge *new_e2 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t2);
+            Edge *new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
+            Edge *new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
+            Edge *new_e2 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t2);
 
-        //change e
-        e->end = new_vtx;
+            //change e
+            e->end = new_vtx;
 
-        //change f1 and f2
-        Face::set_vtx(f1, new_vtx, Face::get_vtx_index(f1, v_end));
-        Face::set_vtx(f2, new_vtx, Face::get_vtx_index(f2, v_end));
+            //change f1 and f2
+            Face::set_vtx(f1, new_vtx, Face::get_vtx_index(f1, v_end));
+            Face::set_vtx(f2, new_vtx, Face::get_vtx_index(f2, v_end));
 
-        f1->disjoin_edge[Face::get_vtx_index(f1, v_orig)] = new_e1;
-        f2->disjoin_edge[Face::get_vtx_index(f2, v_orig)] = new_e2;
+            f1->disjoin_edge[Face::get_vtx_index(f1, v_orig)] = new_e1;
+            f2->disjoin_edge[Face::get_vtx_index(f2, v_orig)] = new_e2;
 
-        //change new face and edge
-        (*(new_e0->connect_face_array)).push_back(new_f1);
-        (*(new_e0->connect_face_array)).push_back(new_f2);
-        (*(new_e1->connect_face_array)).push_back(f1);
-        (*(new_e1->connect_face_array)).push_back(new_f1);
-        (*(new_e2->connect_face_array)).push_back(f2);
-        (*(new_e2->connect_face_array)).push_back(new_f2);
+            //change new face and edge
+            (*(new_e0->connect_face_array)).push_back(new_f1);
+            (*(new_e0->connect_face_array)).push_back(new_f2);
+            (*(new_e1->connect_face_array)).push_back(f1);
+            (*(new_e1->connect_face_array)).push_back(new_f1);
+            (*(new_e2->connect_face_array)).push_back(f2);
+            (*(new_e2->connect_face_array)).push_back(new_f2);
 
-        new_f1->disjoin_edge[0] = new_e0;
-        new_f2->disjoin_edge[0] = new_e0;
-        new_f1->disjoin_edge[1] = new_e1;
-        new_f2->disjoin_edge[1] = new_e2;
-        new_f1->disjoin_edge[2] = e_t12;
-        new_f2->disjoin_edge[2] = e_t22;
+            new_f1->disjoin_edge[0] = new_e0;
+            new_f2->disjoin_edge[0] = new_e0;
+            new_f1->disjoin_edge[1] = new_e1;
+            new_f2->disjoin_edge[1] = new_e2;
+            new_f1->disjoin_edge[2] = e_t12;
+            new_f2->disjoin_edge[2] = e_t22;
 
-        Edge::del_connect_face(e_t12, f1);
-        Edge::del_connect_face(e_t22, f2);
-        Edge::add_connect_face(e_t12, new_f1);
-        Edge::add_connect_face(e_t22, new_f2);
+            Edge::del_connect_face(e_t12, f1);
+            Edge::del_connect_face(e_t22, f2);
+            Edge::add_connect_face(e_t12, new_f1);
+            Edge::add_connect_face(e_t22, new_f2);
 
-        std::array<Edge *, 2> new_edge({new_e0, e});
+            std::array<Edge *, 2> new_edge({new_e0, e});
 
-        return {new_vtx, new_edge};
+            return {new_vtx, new_edge};
+        }
+        if (e->connect_face_array->size() == 1){
+            base_type::Face *f1 = (*(e->connect_face_array))[0];
+
+            Vertex *v_orig = e->orig;
+            Vertex *v_end = e->end;
+            Vertex *v_t1;
+
+            if (f1->p1 != v_orig && f1->p1 != v_end){
+                v_t1 = f1->p1;
+            }
+            if (f1->p2 != v_orig && f1->p2 != v_end){
+                v_t1 = f1->p2;
+            }
+            if (f1->p3 != v_orig && f1->p3 != v_end){
+                v_t1 = f1->p3;
+            }
+
+            //new
+            Face *new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_orig, new_vtx);
+            Face *new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
+
+            Edge *new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_orig);
+            Edge *new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
+            Edge *new_e2 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
+
+            (*(new_e0->connect_face_array)).push_back(new_f1);
+            (*(new_e1->connect_face_array)).push_back(new_f2);
+            (*(new_e2->connect_face_array)).push_back(new_f1);
+            (*(new_e2->connect_face_array)).push_back(new_f2);
+
+            Edge *edge1 = Face::get_edge_from_two_vertex(f1, v_orig, v_t1);//f1->disjoin_edge[Face::get_vtx_index(f1, v_end)];
+            Edge *edge2 = Face::get_edge_from_two_vertex(f1, v_end, v_t1);//f1->disjoin_edge[Face::get_vtx_index(f1, v_orig)];
+
+            new_f1->disjoin_edge[0] = new_e0;
+            new_f1->disjoin_edge[1] = new_e2;
+            new_f1->disjoin_edge[2] = edge1;
+
+            new_f2->disjoin_edge[0] = new_e1;
+            new_f2->disjoin_edge[1] = new_e2;
+            new_f2->disjoin_edge[2] = edge2;
+
+            Edge::del_connect_face(edge1, f1);
+            Edge::del_connect_face(edge2, f1);
+            Edge::add_connect_face(edge1, new_f1);
+            Edge::add_connect_face(edge2, new_f2);
+
+//            new_f1->mark = true;
+//            new_f2->mark = true;
+
+            //delete
+            mesh.face_pool.deallocate(f1);
+            mesh.edge_pool.deallocate(e);
+
+            std::array<Edge *, 2> new_edge({new_e2, e});
+
+            return {new_vtx, new_edge};
+        }
+        if (e->connect_face_array->size() == 0){
+            assert(false);
+        }
     };
 
     auto tri_split = [get_vtx_state, point_uv_calulate_triangle, &edge_split](Triangle_Soup_Mesh &mesh, base_type::Face *f, base_type::Vector3 &p, Face *&f1_new, Face *&f2_new, Face *&f3_new, Vertex *&new_vtx) {
@@ -493,7 +555,7 @@ void end_2_end() {
 
     meshCube.load_from_file("D:/xmy/model/cube.obj");
     meshCube2.load_from_file("D:/xmy/model/cube.obj");
-    meshCurve.load_from_file("D:/xmy/model/curve5.obj");
+    meshCurve.load_from_file("D:/xmy/model/curve6.obj");
 //    meshCurve2.load_from_file("D:/xmy/model/curve3.obj");
 
     //step 1: use meshCurve to subdivide meshCube
@@ -503,13 +565,13 @@ void end_2_end() {
         insert_one_tri(meshCube, f);
     }
 
+    meshCube.save("D:/xmy/model", "output");
+
     for (int i = 0; i < meshCube2.face_pool.size(); i++) {
+    //for (int i = 0; i < 6; i++) {
         auto f = (base_type::Face *) meshCube2.face_pool[i];
         insert_one_tri(meshCurve, f);
     }
-
-    meshCube.save("D:/xmy/model", "output");
-
 
 //    for (int i = 0; i < meshCube.edge_pool.size(); i++) {
 //        auto e = (Edge *) meshCube.edge_pool[i];
