@@ -553,9 +553,9 @@ void end_2_end() {
     Triangle_Soup_Mesh meshCurve;
     Triangle_Soup_Mesh meshCurve2;
 
-    meshCube.load_from_file("D:/xmy/model/cube.obj");
-    meshCube2.load_from_file("D:/xmy/model/cube.obj");
-    meshCurve.load_from_file("D:/xmy/model/curve6.obj");
+    meshCube.load_from_file("D:/xmy/model/8-2.obj");
+    meshCube2.load_from_file("D:/xmy/model/8-2.obj");
+    meshCurve.load_from_file("D:/xmy/model/fm38.obj");
 //    meshCurve2.load_from_file("D:/xmy/model/curve3.obj");
 
     //step 1: use meshCurve to subdivide meshCube
@@ -568,7 +568,7 @@ void end_2_end() {
     meshCube.save("D:/xmy/model", "output");
 
     for (int i = 0; i < meshCube2.face_pool.size(); i++) {
-    //for (int i = 0; i < 6; i++) {
+    //for (int i = 0; i < 100; i++) {
         auto f = (base_type::Face *) meshCube2.face_pool[i];
         insert_one_tri(meshCurve, f);
     }

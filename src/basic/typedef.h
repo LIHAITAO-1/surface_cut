@@ -571,7 +571,8 @@ namespace base_type {
             assert(f->static_index >= 0);
             bool orient;
             if (!b1) {
-                orient = Geometrical_Predicates::toleft(f->p1->position, f->p2->position, f->p3->position, t->p1->position);
+                orient = Geometrical_Predicates::toleft(f->p1->position, f->p2->position, f->p3->position,
+                                                        t->p1->position);
                 t->faces[0] = f;
             }
             if (!b2) {
@@ -756,6 +757,10 @@ namespace base_type {
                 auto p2 = (Vertex *) vertex_pool[p2_index];
                 auto p3 = (Vertex *) vertex_pool[p3_index];
 
+                if ((p1 == p2) || (p1 == p3) || (p2 == p3)) {
+                    continue;
+                }
+
                 auto find_same_face_in_pool = [](MemoryPool &pool, Vertex *p1, Vertex *p2, Vertex *p3) -> Face * {
                     for (int i = 0; i < pool.size(); i++) {
                         auto f = (Face *) pool[i];
@@ -767,12 +772,11 @@ namespace base_type {
                     }
                     return nullptr;
                 };
+
                 Face *face_find = find_same_face_in_pool(face_pool, p1, p2, p3);//这个地方可以优化，在顶点处保存相连面
 
                 if (face_find == nullptr) {
-                    assert(p1 != p2);
-                    assert(p1 != p3);
-                    assert(p2 != p3);
+
 
                     //ASSERT_MSG(colinear(p1->position, p2->position, p3->position) == false, "find colinear triangle face");
                     Face::allocate_from_pool(&face_pool, p1, p2, p3);
@@ -823,7 +827,7 @@ namespace base_type {
                     special_edge_num++;
             }
 
-            data.set_cell_number(face_pool.size()+ special_edge_num);
+            data.set_cell_number(face_pool.size() + special_edge_num);
 //            data.set_edge_number(edge_pool.size());
 
             for (int j = 0; j < vertex_pool.size(); j++) {
@@ -850,7 +854,7 @@ namespace base_type {
 
             for (int j = 0; j < edge_pool.size(); j++) {
                 const auto &e = (Edge *) edge_pool[j];
-                if(e->special== false)
+                if (e->special == false)
                     continue;
                 data.cellList[index].pointList = new int[2];
                 data.cellList[index].numberOfPoints = 2;
@@ -907,7 +911,8 @@ namespace base_type {
             a32 = b.z;
             a33 = c.z;
 
-            double det_abc = a11 * a22 * a33 + a12 * a23 * a31 + a13 * a21 * a32 - a31 * a22 * a13 - a32 * a23 * a11 - a21 * a12 * a33;
+            double det_abc = a11 * a22 * a33 + a12 * a23 * a31 + a13 * a21 * a32 - a31 * a22 * a13 - a32 * a23 * a11 -
+                             a21 * a12 * a33;
 
             double denominator = a_len * b_len * c_len + ab_dot * c_len + bc_dot * a_len + ca_dot * b_len;
 
@@ -978,7 +983,8 @@ namespace base_type {
             }
 
             for (int i = 0; i < data.numberOfPoints; i++) {
-                base_type::Vertex::allocate_from_pool(&vertex_pool, {data.pointList[i * 3], data.pointList[i * 3 + 1], data.pointList[i * 3 + 2]});
+                base_type::Vertex::allocate_from_pool(&vertex_pool, {data.pointList[i * 3], data.pointList[i * 3 + 1],
+                                                                     data.pointList[i * 3 + 2]});
             }
             for (int i = 0; i < data.numberOfCell; i++) {
                 auto &cell = data.cellList[i];
@@ -1012,7 +1018,8 @@ namespace base_type {
                     if (t->faces[tet_face_index] == nullptr) {
                         if (t->neighbors[tet_face_index] != nullptr) {
                             //find adjface_vtx_index
-                            auto face_index = base_type::Tetrahedra::find_disjoin_tet_non_share_vtx_index_in_t2(t, t->neighbors[tet_face_index]);
+                            auto face_index = base_type::Tetrahedra::find_disjoin_tet_non_share_vtx_index_in_t2(t,
+                                                                                                                t->neighbors[tet_face_index]);
                             auto face_in_neighbor = t->neighbors[tet_face_index]->faces[face_index];
                             if (face_in_neighbor != nullptr) {
                                 base_type::Tetrahedra::bind_tet_and_face(t, face_in_neighbor);
@@ -1181,7 +1188,8 @@ namespace base_type {
                 if (f->disjoin_tet[1] != nullptr) {
                     cl = f->disjoin_tet[1]->static_index + 1;
                 }
-                fprintf(fout, "%x %x %x %x %x\n", f->p1->static_index + 1, f->p2->static_index + 1, f->p3->static_index + 1, cr, cl);
+                fprintf(fout, "%x %x %x %x %x\n", f->p1->static_index + 1, f->p2->static_index + 1,
+                        f->p3->static_index + 1, cr, cl);
             }
             fprintf(fout, "))\n");
 
@@ -1196,13 +1204,15 @@ namespace base_type {
             for (auto iter = cell_class_map.begin(); iter != cell_class_map.end(); iter++) {
                 int class_id = iter->first;
                 int class_size = iter->second;
-                out_str = ("(12 (" + std::to_string(class_id + 2) + " " + int_2_hex_string(tet_index) + " " + int_2_hex_string(class_size + tet_index - 1) + " 1 2)(\n");
+                out_str = ("(12 (" + std::to_string(class_id + 2) + " " + int_2_hex_string(tet_index) + " " +
+                           int_2_hex_string(class_size + tet_index - 1) + " 1 2)(\n");
                 tet_index += class_size;
                 fprintf(fout, out_str.c_str());
                 for (int i = 0; i < cell_class_array.size(); i++) {
                     Tetrahedra *t = (Tetrahedra *) tet_pool[i];
                     if (cell_class_array[i] == class_id) {
-                        fprintf(fout, "%x %x %x %x\n", t->p1->static_index + 1, t->p2->static_index + 1, t->p3->static_index + 1, t->p4->static_index + 1);
+                        fprintf(fout, "%x %x %x %x\n", t->p1->static_index + 1, t->p2->static_index + 1,
+                                t->p3->static_index + 1, t->p4->static_index + 1);
                     }
                 }
                 fprintf(fout, "))\n");
@@ -1226,7 +1236,8 @@ namespace base_type {
             fprintf(fout, "BEGIN BULK\n");
             for (int j = 0; j < vertex_pool.size(); j++) {
                 const auto &vtx = (Vertex *) vertex_pool[j];
-                fprintf(fout, "GRID*   %d                                  %e   %e\n*           %e\n", vtx->static_index + 1, vtx->position.x, vtx->position.y, vtx->position.z);
+                fprintf(fout, "GRID*   %d                                  %e   %e\n*           %e\n",
+                        vtx->static_index + 1, vtx->position.x, vtx->position.y, vtx->position.z);
             }
 
             std::vector<int> cell_class_array;
@@ -1234,7 +1245,9 @@ namespace base_type {
             slot_shrink(cell_class_array, cell_class_map);
             for (int j = 0; j < tet_pool.size(); j++) {
                 const auto &t = (Tetrahedra *) tet_pool[j];
-                fprintf(fout, "CTETRA  %d      %d       %d    %d    %d    %d\n", t->static_index + 1, cell_class_array[j], t->p1->static_index + 1, t->p2->static_index + 1, t->p3->static_index + 1, t->p4->static_index + 1);
+                fprintf(fout, "CTETRA  %d      %d       %d    %d    %d    %d\n", t->static_index + 1,
+                        cell_class_array[j], t->p1->static_index + 1, t->p2->static_index + 1, t->p3->static_index + 1,
+                        t->p4->static_index + 1);
             }
 
             fprintf(fout, "ENDDATA");
@@ -1259,9 +1272,12 @@ namespace base_type {
 
                 fprintf(fout, " facet normal %.16g %.16g %.16g\n", n.x, n.y, n.z);
                 fprintf(fout, "     outer loop\n");
-                fprintf(fout, "         vertex  %.16g %.16g %.16g\n", f->p1->position.x, f->p1->position.y, f->p1->position.z);
-                fprintf(fout, "         vertex  %.16g %.16g %.16g\n", f->p2->position.x, f->p2->position.y, f->p2->position.z);
-                fprintf(fout, "         vertex  %.16g %.16g %.16g\n", f->p3->position.x, f->p3->position.y, f->p3->position.z);
+                fprintf(fout, "         vertex  %.16g %.16g %.16g\n", f->p1->position.x, f->p1->position.y,
+                        f->p1->position.z);
+                fprintf(fout, "         vertex  %.16g %.16g %.16g\n", f->p2->position.x, f->p2->position.y,
+                        f->p2->position.z);
+                fprintf(fout, "         vertex  %.16g %.16g %.16g\n", f->p3->position.x, f->p3->position.y,
+                        f->p3->position.z);
                 fprintf(fout, "     endloop\n");
                 fprintf(fout, " endfacet\n");
             }
