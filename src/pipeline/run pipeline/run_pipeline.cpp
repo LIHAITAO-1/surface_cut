@@ -43,6 +43,94 @@ struct Cut_result {
     Edge *c_e[2];
 };
 
+struct AABB {
+    base_type::Vector3 min;
+    base_type::Vector3 max;
+
+    base_type::Vector3 getCenter() const{
+        return base_type::Vector3((min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2);
+    }
+
+    double getCenterX() const {
+        return getCenter().x;
+    }
+};
+
+bool aabbIntersect(const AABB& A, const AABB& B) {
+    // 两个AABB不相交的条件
+    return !(A.max.x < B.min.x || A.min.x > B.max.x ||
+        A.max.y < B.min.y || A.min.y > B.max.y ||
+        A.max.z < B.min.z || A.min.z > B.max.z);
+}
+
+struct Object {
+    AABB bounds;
+    Face* face;
+    // 其他物体相关的属性
+};
+
+// BVH节点
+struct BVHNode {
+    AABB bounds;
+    BVHNode* left;
+    BVHNode* right;
+};
+
+// 为了构建BVH树，定义一个比较函数，根据最长轴进行排序
+struct CompareObjects {
+    int axis;
+    CompareObjects(int axis) : axis(axis) {}
+    bool operator()(const Object& a, const Object& b) const {
+        if (axis == 0)
+            return a.bounds.min.x < b.bounds.min.x;
+        if (axis == 1)
+            return a.bounds.min.y < b.bounds.min.y;
+        if (axis == 2)
+            return a.bounds.min.z < b.bounds.min.z;
+    }
+};
+
+// 递归构建BVH树
+BVHNode* createBVH(std::vector<Object>& objects, int start, int end) {
+    BVHNode* node = new BVHNode;
+
+    if (start == end) {
+        node->bounds = objects[start].bounds;
+        node->left = nullptr;
+        node->right = nullptr;
+    }
+    else {
+        AABB box;
+        for (int i = start; i <= end; ++i) {
+            box.min.x = std::min(box.min.x, objects[i].bounds.min.x);
+            box.min.y = std::min(box.min.y, objects[i].bounds.min.y);
+            box.min.z = std::min(box.min.z, objects[i].bounds.min.z);
+            box.max.x = std::max(box.max.x, objects[i].bounds.max.x);
+            box.max.y = std::max(box.max.y, objects[i].bounds.max.y);
+            box.max.z = std::max(box.max.z, objects[i].bounds.max.z);
+        }
+
+        base_type::Vector3 center = base_type::Vector3((box.min.x + box.max.x) / 2,
+            (box.min.y + box.max.y) / 2,
+            (box.min.z + box.max.z) / 2);
+
+        base_type::Vector3 extent = box.max - box.min;
+        int longestAxis = 0;
+        if (extent.y > extent.x) longestAxis = 1;
+        if (extent.z > extent.y && extent.z > extent.x) longestAxis = 2;
+
+        std::sort(objects.begin() + start, objects.begin() + end + 1, CompareObjects(longestAxis));
+
+        int mid = start + (end - start) / 2;
+
+        node->left = createBVH(objects, start, mid);
+        node->right = createBVH(objects, mid + 1, end);
+        node->bounds = box;
+    }
+
+    return node;
+}
+
 void end_2_end() {
     auto get_vtx_state = [](double a, double b) {
         if ((a + b) < 1 - 1e-6 && a > 1e-6 && b > 1e-6) {
@@ -356,7 +444,23 @@ void end_2_end() {
         return cut_result;
     };
 
-    auto insert_one_tri = [&](Triangle_Soup_Mesh &mesh, base_type::Face *f_insert) {
+    auto insert_one_tri = [&](Triangle_Soup_Mesh &mesh, BVHNode* root, base_type::Face *f_insert) {
+        //if (root == nullptr)
+        //    return;
+        //AABB aabb;
+        //aabb.min.x = std::min(std::min(f_insert->p1->position.x, f_insert->p2->position.x), f_insert->p3->position.x);
+        //aabb.min.y = std::min(std::min(f_insert->p1->position.y, f_insert->p2->position.y), f_insert->p3->position.y);
+        //aabb.min.z = std::min(std::min(f_insert->p1->position.z, f_insert->p2->position.z), f_insert->p3->position.z);
+        //aabb.max.x = std::max(std::max(f_insert->p1->position.x, f_insert->p2->position.x), f_insert->p3->position.x);
+        //aabb.max.y = std::max(std::max(f_insert->p1->position.y, f_insert->p2->position.y), f_insert->p3->position.y);
+        //aabb.max.z = std::max(std::max(f_insert->p1->position.z, f_insert->p2->position.z), f_insert->p3->position.z);
+        //if (!aabbIntersect(aabb, root->bounds))
+        //    return;
+        //if (root->left == nullptr && root->right == nullptr) {
+        //    clear_all_tri_mark(mesh);
+
+        //}
+
         clear_all_tri_mark(mesh);
 
         insert_start:
@@ -547,6 +651,8 @@ void end_2_end() {
         }
     };
 
+    std::string path;
+
     logger().info("Step 1: Compute Point");
     Triangle_Soup_Mesh meshCube;
     Triangle_Soup_Mesh meshCube2;
@@ -556,34 +662,39 @@ void end_2_end() {
     meshCube.load_from_file("D:/xmy/model/8-2.obj");
     meshCube2.load_from_file("D:/xmy/model/8-2.obj");
     meshCurve.load_from_file("D:/xmy/model/fm38.obj");
-//    meshCurve2.load_from_file("D:/xmy/model/curve3.obj");
 
     //step 1: use meshCurve to subdivide meshCube
 
+    std::vector<Object> objects;
+    for (int i = 0; i < meshCube.face_pool.size(); i++) {
+        auto f = (base_type::Face*)meshCube.face_pool[i];
+        Object obj;
+        obj.bounds.min.x = std::min(std::min(f->p1->position.x, f->p2->position.x), f->p3->position.x);
+        obj.bounds.min.y = std::min(std::min(f->p1->position.y, f->p2->position.y), f->p3->position.y);
+        obj.bounds.min.z = std::min(std::min(f->p1->position.z, f->p2->position.z), f->p3->position.z);
+        obj.bounds.max.x = std::max(std::max(f->p1->position.x, f->p2->position.x), f->p3->position.x);
+        obj.bounds.max.y = std::max(std::max(f->p1->position.y, f->p2->position.y), f->p3->position.y);
+        obj.bounds.max.z = std::max(std::max(f->p1->position.z, f->p2->position.z), f->p3->position.z);
+        obj.face = f;
+        objects.push_back(obj);
+    }
+
+    BVHNode* root = createBVH(objects, 0, objects.size() - 1);
+
     for (int i = 0; i < meshCurve.face_pool.size(); i++) {
         auto f = (base_type::Face *) meshCurve.face_pool[i];
-        insert_one_tri(meshCube, f);
+        insert_one_tri(meshCube, root, f);
     }
+
+
 
     meshCube.save("D:/xmy/model", "output");
 
     for (int i = 0; i < meshCube2.face_pool.size(); i++) {
     //for (int i = 0; i < 100; i++) {
         auto f = (base_type::Face *) meshCube2.face_pool[i];
-        insert_one_tri(meshCurve, f);
+        insert_one_tri(meshCurve, root, f);
     }
-
-//    for (int i = 0; i < meshCube.edge_pool.size(); i++) {
-//        auto e = (Edge *) meshCube.edge_pool[i];
-//        if (e->orig->special && e->end->special)
-//            e->special = true;
-//    }
-
-//    for (int i = 0; i < meshCurve.edge_pool.size(); i++) {
-//        auto e = (Edge *) meshCurve.edge_pool[i];
-//        if (e->orig->special && e->end->special)
-//            e->special = true;
-//    }
 
     meshCurve.save("D:/xmy/model", "outputCurve");
 
@@ -603,7 +714,6 @@ void end_2_end() {
     auto unmarked_face = get_unmarked_face(meshCube);
     auto unmarked_face_Curve = get_unmarked_face(meshCurve);
 
-    Triangle_Soup_Mesh CutFace;
     int part_index = 0;
     do {
         std::vector<Face *> face_stack = {unmarked_face_Curve};
@@ -628,20 +738,19 @@ void end_2_end() {
         Triangle_Soup_Mesh part;
 
         for (auto f: face_array) {
-            auto v1 = part.add_vtx(f->p1->position);
-            auto v2 = part.add_vtx(f->p2->position);
-            auto v3 = part.add_vtx(f->p3->position);
-            part.add_face(v1, v2, v3);
-//            auto vv1 = CutFace.add_vtx(f->p1->position);
-//            auto vv2 = CutFace.add_vtx(f->p2->position);
-//            auto vv3 = CutFace.add_vtx(f->p3->position);
-//            CutFace.add_face(v1, v2, v3);
+            //auto v1 = part.add_vtx(f->p1->position);
+            //auto v2 = part.add_vtx(f->p2->position);
+            //auto v3 = part.add_vtx(f->p3->position);
+            //part.add_face(v1, v2, v3);
+            auto v1 = Vertex::allocate_from_pool(&part.vertex_pool, f->p1->position);
+            auto v2 = Vertex::allocate_from_pool(&part.vertex_pool, f->p2->position);
+            auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
+            Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
         }
         part.save("D:/xmy/model", "output_Curve" + std::to_string(part_index++));
     } while (unmarked_face_Curve);
 
     meshCurve2.load_from_file("D:/xmy/model/output_Curve1.vtu");
-//    meshCurve2.save("D:/xmy/model", "output_xxx");
 
     part_index = 0;
     do {
@@ -667,18 +776,26 @@ void end_2_end() {
         Triangle_Soup_Mesh part;
 
         for (auto f: face_array) {
-            auto v1 = part.add_vtx(f->p1->position);
-            auto v2 = part.add_vtx(f->p2->position);
-            auto v3 = part.add_vtx(f->p3->position);
-            part.add_face(v1, v2, v3);
+            //auto v1 = part.add_vtx(f->p1->position);
+            //auto v2 = part.add_vtx(f->p2->position);
+            //auto v3 = part.add_vtx(f->p3->position);
+            //part.add_face(v1, v2, v3);
+            auto v1 = Vertex::allocate_from_pool(&part.vertex_pool, f->p1->position);
+            auto v2 = Vertex::allocate_from_pool(&part.vertex_pool, f->p2->position);
+            auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
+            Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
         }
 
         for (int i = 0; i < meshCurve2.face_pool.size(); i++){
             auto f = (base_type::Face *) meshCurve2.face_pool[i];
-            auto v1 = part.add_vtx(f->p1->position);
-            auto v2 = part.add_vtx(f->p2->position);
-            auto v3 = part.add_vtx(f->p3->position);
-            part.add_face(v1, v2, v3);
+            //auto v1 = part.add_vtx(f->p1->position);
+            //auto v2 = part.add_vtx(f->p2->position);
+            //auto v3 = part.add_vtx(f->p3->position);
+            //part.add_face(v1, v2, v3);
+            auto v1 = Vertex::allocate_from_pool(&part.vertex_pool, f->p1->position);
+            auto v2 = Vertex::allocate_from_pool(&part.vertex_pool, f->p2->position);
+            auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
+            Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
         }
         part.save("D:/xmy/model", "output_Cube" + std::to_string(part_index++));
     } while (unmarked_face);

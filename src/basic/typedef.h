@@ -721,31 +721,62 @@ namespace base_type {
             Mesh_Loader::FileData data;
             Mesh_Loader::load_by_extension(path.c_str(), data);
 
+            std::unordered_map<double, std::vector<Vector3>> hashPoint;
             std::map<int, int> vtx_relocation_map;
+            int index = 0;
             for (int i = 0; i < data.numberOfPoints; i++) {
                 Vector3 p(data.pointList[i * 3], data.pointList[i * 3 + 1], data.pointList[i * 3 + 2]);
 
-                auto find_same_vtx_in_pool = [](MemoryPool &pool, Vector3 p, int &index) -> Vertex * {
-                    for (int i = 0; i < pool.size(); i++) {
-                        auto v = (Vertex *) pool[i];
-                        if (vector_length_sqr(p, v->position) < 1e-8) {
-                            index = i;
-                            return v;
-                        }
-
-                    }
-                    return nullptr;
-                };
-                int index;
-                Vertex *vtx_find = find_same_vtx_in_pool(vertex_pool, p, index);
-                if (vtx_find == nullptr) {
+                double key = (double)round((p.x + p.y + p.z) * 1e6) / 1e6 ;
+                if (hashPoint[key].size() == 0) {
+                    hashPoint[key].push_back(p);
                     auto v = Vertex::allocate_from_pool(&vertex_pool);
                     v->position = p;
                     vtx_relocation_map[i] = vertex_pool.size() - 1;
-                } else {
-                    vtx_relocation_map[i] = index;
+                    index++;
                 }
+                else {
+                    int len = 0;
+                    for (int num = 0; num < hashPoint[key].size(); num++) {
+                        if (vector_length_sqr(p, hashPoint[key][num]) < 1e-8) {
+                            vtx_relocation_map[i] = index;
+                            break;
+                        }
+                        else
+                            len++;      
+                    }
+                    if (len == hashPoint[key].size()) {
+                        hashPoint[key].push_back(p);
+                        auto v = Vertex::allocate_from_pool(&vertex_pool);
+                        v->position = p;
+                        vtx_relocation_map[i] = vertex_pool.size() - 1;
+                        index++;
+                    }                      
+                }
+                  
+                //auto find_same_vtx_in_pool = [](MemoryPool &pool, Vector3 p, int &index) -> Vertex * {
+                //    for (int i = 0; i < pool.size(); i++) {
+                //        auto v = (Vertex *) pool[i];
+                //        if (vector_length_sqr(p, v->position) < 1e-8) {
+                //            index = i;
+                //            return v;
+                //        }
+
+                //    }
+                //    return nullptr;
+                //};
+                //int index;
+                //Vertex *vtx_find = find_same_vtx_in_pool(vertex_pool, p, index);
+                //if (vtx_find == nullptr) {
+                //    auto v = Vertex::allocate_from_pool(&vertex_pool);
+                //    v->position = p;
+                //    vtx_relocation_map[i] = vertex_pool.size() - 1;
+                //} else {
+                //    vtx_relocation_map[i] = index;
+                //}
             }
+
+            std::unordered_map<int, std::vector<std::vector<int>>> hashCell;
 
             for (int i = 0; i < data.numberOfCell; i++) {
                 auto cell = data.cellList[i];
@@ -761,26 +792,64 @@ namespace base_type {
                     continue;
                 }
 
-                auto find_same_face_in_pool = [](MemoryPool &pool, Vertex *p1, Vertex *p2, Vertex *p3) -> Face * {
-                    for (int i = 0; i < pool.size(); i++) {
-                        auto f = (Face *) pool[i];
-                        bool b1 = f->p1 == p1 || f->p1 == p2 || f->p1 == p3;
-                        bool b2 = f->p2 == p1 || f->p2 == p2 || f->p2 == p3;
-                        bool b3 = f->p3 == p1 || f->p3 == p2 || f->p3 == p3;
-                        if (b1 && b2 && b3)
-                            return f;
-                    }
-                    return nullptr;
-                };
+                int key = p1_index + p2_index + p3_index;
+                std::vector<int> Value;
+                Value.clear();
+                Value.push_back(p1_index);
+                Value.push_back(p2_index);
+                Value.push_back(p3_index);
 
-                Face *face_find = find_same_face_in_pool(face_pool, p1, p2, p3);//这个地方可以优化，在顶点处保存相连面
-
-                if (face_find == nullptr) {
-
-
-                    //ASSERT_MSG(colinear(p1->position, p2->position, p3->position) == false, "find colinear triangle face");
+                if (hashCell[key].size() == 0) {
+                    hashCell[key].push_back(Value);
                     Face::allocate_from_pool(&face_pool, p1, p2, p3);
                 }
+                else {
+                    int len = 0;
+                    for (int num = 0; num < hashCell[key].size(); num++) {
+                        std::vector<int> a;
+                        a.push_back(hashCell[key][num][0]);
+                        a.push_back(hashCell[key][num][1]);
+                        a.push_back(hashCell[key][num][2]);
+                        std::vector<int> b;
+                        b.push_back(p1_index);
+                        b.push_back(p2_index);
+                        b.push_back(p3_index);
+                        
+                        sort(a.begin(), a.end());
+                        sort(b.begin(), b.end());
+
+                        if (a[0] == b[0] && a[1] == b[1] && a[2] == b[2]) {
+                            break;
+                        }
+                        else
+                            len++;
+                    }
+                    if (len == hashCell[key].size()) {
+                        hashCell[key].push_back(Value);
+                        Face::allocate_from_pool(&face_pool, p1, p2, p3);
+                    }
+                }
+
+                //auto find_same_face_in_pool = [](MemoryPool &pool, Vertex *p1, Vertex *p2, Vertex *p3) -> Face * {
+                //    for (int i = 0; i < pool.size(); i++) {
+                //        auto f = (Face *) pool[i];
+                //        bool b1 = f->p1 == p1 || f->p1 == p2 || f->p1 == p3;
+                //        bool b2 = f->p2 == p1 || f->p2 == p2 || f->p2 == p3;
+                //        bool b3 = f->p3 == p1 || f->p3 == p2 || f->p3 == p3;
+                //        if (b1 && b2 && b3)
+                //            return f;
+                //    }
+                //    return nullptr;
+                //};
+
+                //Face *face_find = find_same_face_in_pool(face_pool, p1, p2, p3);//这个地方可以优化，在顶点处保存相连面
+
+                //if (face_find == nullptr) {
+
+
+                //    //ASSERT_MSG(colinear(p1->position, p2->position, p3->position) == false, "find colinear triangle face");
+                //    Face::allocate_from_pool(&face_pool, p1, p2, p3);
+                //}
             }
 
             connect_edge_by_face();
