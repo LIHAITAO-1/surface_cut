@@ -17,7 +17,7 @@
 #include <iterator>
 
 #include "basic/math/vector3.h"
-#include "Eigen/Dense"
+//#include "Eigen/Dense"
 
 //typedef Eigen::Vector3d Point3d;
 
@@ -77,15 +77,15 @@ enum PositionType
 
 int InTriangle(const Triangle& tri, const Vector3& pt);
 
-PositionType GetPositionType(const Triangle& tri, const Vector3& pt);
+//PositionType GetPositionType(const Triangle& tri, const Vector3& pt);
 
-Vector3 CalInterPoint(const Eigen::Vector3d& planeNormal, const Vector3& ptOnPlane, const Eigen::Vector3d& lineDir, const Vector3& ptOnLine);
+//Vector3 CalInterPoint(const Eigen::Vector3d& planeNormal, const Vector3& ptOnPlane, const Eigen::Vector3d& lineDir, const Vector3& ptOnLine);
 
 bool CheckPtOnTriangle(const Triangle& tri, const Vector3& pt);
 
-IntersectionType GetIntersectionPoints(const Triangle& triPlane, const Triangle& triPoints, std::vector<Vector3>& pts);
+//IntersectionType GetIntersectionPoints(const Triangle& triPlane, const Triangle& triPoints, std::vector<Vector3>& pts);
 
-void TriIntersectTestCase();
+//void TriIntersectTestCase();
 
 bool ComputeLineWithTwoTriangle(const Triangle& tri1, const Triangle& tri2, std::vector<Vector3>& pts);
 

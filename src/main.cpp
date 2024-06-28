@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     tbb::task_scheduler_init scheduler(num_threads, stack_size);
 
 
-    end_2_end();
+    surface_cut();
 
 
     return 0;

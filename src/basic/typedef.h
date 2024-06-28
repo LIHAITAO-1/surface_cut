@@ -13,7 +13,7 @@
 #include <set>
 #include <unordered_set>
 
-#include <Eigen/Sparse>
+//#include <Eigen/Sparse>
 
 #include "basic/data structure/memory_pool.h"
 #include "basic/math/vector3.h"

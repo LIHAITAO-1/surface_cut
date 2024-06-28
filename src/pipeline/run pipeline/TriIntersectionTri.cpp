@@ -2,12 +2,8 @@
 // Created by 22624 on 2024/5/17.
 //
 
-//
-// Created by 22624 on 2024/5/17.
-//
-#include "TriIntersectionTri.h"
 
-//typedef Eigen::Vector3d Point3d;
+#include "TriIntersectionTri.h"
 
 #define EPSION 1e-7
 
@@ -63,42 +59,42 @@ int GetSignType(double value)
 //        return 1;
 //}
 
-PositionType GetPositionType(const Triangle& tri, const Vector3& pt)
-{
-    Vector3 ap = tri.m_pt[0] - pt;
-    Vector3 apUnit = ap.normalise();
-    Vector3 normal = (tri.m_pt[1]-tri.m_pt[0]).cross(tri.m_pt[2]-tri.m_pt[0]);
-    Vector3 normalUnit = normal.normalise();
-    double inPlane = std::fabs(normalUnit.dot(apUnit));
-    if (inPlane > EPSION) {
-        return OUT; // 点p不在三角形所在的平面上
-    }
-    Eigen::Matrix3d oriented;
-    oriented << tri.m_pt[0].x - pt.x, tri.m_pt[0].y - pt.y, tri.m_pt[0].z - pt.z,
-            tri.m_pt[1].x - pt.x, tri.m_pt[1].y - pt.y, tri.m_pt[1].z - pt.z,
-            tri.m_pt[2].x- pt.x, tri.m_pt[2].y - pt.y, tri.m_pt[2].z - pt.z;
-
-//    oriented << 1, 1, 1,
-//                0, 1, 1,
-//                0, 0, 1;
-    double value = oriented.determinant();
-    if (IsNegative(value))
-    {
-        return OUT;
-    }
-    else if (IsPositive(value))
-    {
-        return IN;
-    }
-
-    return ON;
-}
-
-Vector3 CalInterPoint(const Vector3& planeNormal, const Vector3& ptOnPlane, const Vector3& lineDir, const Vector3& ptOnLine)
-{
-    double t = planeNormal.dot(ptOnPlane - ptOnLine) / planeNormal.dot(lineDir);
-    return ptOnLine + lineDir * t;
-}
+//PositionType GetPositionType(const Triangle& tri, const Vector3& pt)
+//{
+//    Vector3 ap = tri.m_pt[0] - pt;
+//    Vector3 apUnit = ap.normalise();
+//    Vector3 normal = (tri.m_pt[1]-tri.m_pt[0]).cross(tri.m_pt[2]-tri.m_pt[0]);
+//    Vector3 normalUnit = normal.normalise();
+//    double inPlane = std::fabs(normalUnit.dot(apUnit));
+//    if (inPlane > EPSION) {
+//        return OUT; // 点p不在三角形所在的平面上
+//    }
+//    Eigen::Matrix3d oriented;
+//    oriented << tri.m_pt[0].x - pt.x, tri.m_pt[0].y - pt.y, tri.m_pt[0].z - pt.z,
+//            tri.m_pt[1].x - pt.x, tri.m_pt[1].y - pt.y, tri.m_pt[1].z - pt.z,
+//            tri.m_pt[2].x- pt.x, tri.m_pt[2].y - pt.y, tri.m_pt[2].z - pt.z;
+//
+////    oriented << 1, 1, 1,
+////                0, 1, 1,
+////                0, 0, 1;
+//    double value = oriented.determinant();
+//    if (IsNegative(value))
+//    {
+//        return OUT;
+//    }
+//    else if (IsPositive(value))
+//    {
+//        return IN;
+//    }
+//
+//    return ON;
+//}
+//
+//Vector3 CalInterPoint(const Vector3& planeNormal, const Vector3& ptOnPlane, const Vector3& lineDir, const Vector3& ptOnLine)
+//{
+//    double t = planeNormal.dot(ptOnPlane - ptOnLine) / planeNormal.dot(lineDir);
+//    return ptOnLine + lineDir * t;
+//}
 
 bool CheckPtOnTriangle(const Triangle& tri, const Vector3& pt)
 {
@@ -118,134 +114,134 @@ bool CheckPtOnTriangle(const Triangle& tri, const Vector3& pt)
     return false;
 }
 
-IntersectionType GetIntersectionPoints(const Triangle& triPlane, const Triangle& triPoints, std::vector<Vector3>& pts)
-{
-    std::vector<Vector3> ptResult;
-
-    PositionType relateToTriPlane[3] = {
-            GetPositionType(triPlane, triPoints.m_pt[0]),
-            GetPositionType(triPlane, triPoints.m_pt[1]),
-            GetPositionType(triPlane, triPoints.m_pt[2])
-    };
-
-    // 平面和直线相交计算
-    // 直线 P = V0 + dir*t
-    // 平面 Normal \cdot (P - POn) = 0
-    // =>
-    // t = N \cdot (POn - V0) / N \cdot dir
-    if (relateToTriPlane[0] == relateToTriPlane[1] && relateToTriPlane[1] == relateToTriPlane[2])
-    {
-        if (relateToTriPlane[0] == ON)
-        {
-            return COPLANE;
-        }
-        else
-        {
-            return DISJOINT;
-        }
-    }
-    else if (relateToTriPlane[0] == relateToTriPlane[1])
-    {
-//        if (relateToTriPlane[0] == OUT)
+//IntersectionType GetIntersectionPoints(const Triangle& triPlane, const Triangle& triPoints, std::vector<Vector3>& pts)
+//{
+//    std::vector<Vector3> ptResult;
+//
+//    PositionType relateToTriPlane[3] = {
+//            GetPositionType(triPlane, triPoints.m_pt[0]),
+//            GetPositionType(triPlane, triPoints.m_pt[1]),
+//            GetPositionType(triPlane, triPoints.m_pt[2])
+//    };
+//
+//    // 平面和直线相交计算
+//    // 直线 P = V0 + dir*t
+//    // 平面 Normal \cdot (P - POn) = 0
+//    // =>
+//    // t = N \cdot (POn - V0) / N \cdot dir
+//    if (relateToTriPlane[0] == relateToTriPlane[1] && relateToTriPlane[1] == relateToTriPlane[2])
+//    {
+//        if (relateToTriPlane[0] == ON)
 //        {
-//            std::cout << "Test" << std::endl;
+//            return COPLANE;
 //        }
 //        else
-        {
-            Vector3 inter1 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[2] - triPoints.m_pt[0], triPoints.m_pt[2]);
-            Vector3 inter2 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[2] - triPoints.m_pt[1], triPoints.m_pt[2]);
-
-            if (CheckPtOnTriangle(triPlane, inter1)) ptResult.push_back(inter1);
-            if (CheckPtOnTriangle(triPlane, inter2)) ptResult.push_back(inter2);
-        }
-    }
-    else if (relateToTriPlane[0] == relateToTriPlane[2])
-    {
-//        if (relateToTriPlane[0] == OUT)
 //        {
-//            std::cout << "Test" << std::endl;
+//            return DISJOINT;
 //        }
-//        else
-        {
-            Vector3 inter1 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[1] - triPoints.m_pt[0], triPoints.m_pt[1]);
-            Vector3 inter2 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[1] - triPoints.m_pt[2], triPoints.m_pt[1]);
-
-            if (CheckPtOnTriangle(triPlane, inter1)) ptResult.push_back(inter1);
-            if (CheckPtOnTriangle(triPlane, inter2)) ptResult.push_back(inter2);
-        }
-    }
-    else if (relateToTriPlane[1] == relateToTriPlane[2])
-    {
-//        if (relateToTriPlane[1] == OUT)
+//    }
+//    else if (relateToTriPlane[0] == relateToTriPlane[1])
+//    {
+////        if (relateToTriPlane[0] == OUT)
+////        {
+////            std::cout << "Test" << std::endl;
+////        }
+////        else
 //        {
-//            std::cout << "Test" << std::endl;
+//            Vector3 inter1 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[2] - triPoints.m_pt[0], triPoints.m_pt[2]);
+//            Vector3 inter2 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[2] - triPoints.m_pt[1], triPoints.m_pt[2]);
+//
+//            if (CheckPtOnTriangle(triPlane, inter1)) ptResult.push_back(inter1);
+//            if (CheckPtOnTriangle(triPlane, inter2)) ptResult.push_back(inter2);
 //        }
-//        else
-        {
-            Vector3 inter1 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[0] - triPoints.m_pt[1], triPoints.m_pt[0]);
-            Vector3 inter2 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[0] - triPoints.m_pt[2], triPoints.m_pt[0]);
+//    }
+//    else if (relateToTriPlane[0] == relateToTriPlane[2])
+//    {
+////        if (relateToTriPlane[0] == OUT)
+////        {
+////            std::cout << "Test" << std::endl;
+////        }
+////        else
+//        {
+//            Vector3 inter1 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[1] - triPoints.m_pt[0], triPoints.m_pt[1]);
+//            Vector3 inter2 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[1] - triPoints.m_pt[2], triPoints.m_pt[1]);
+//
+//            if (CheckPtOnTriangle(triPlane, inter1)) ptResult.push_back(inter1);
+//            if (CheckPtOnTriangle(triPlane, inter2)) ptResult.push_back(inter2);
+//        }
+//    }
+//    else if (relateToTriPlane[1] == relateToTriPlane[2])
+//    {
+////        if (relateToTriPlane[1] == OUT)
+////        {
+////            std::cout << "Test" << std::endl;
+////        }
+////        else
+//        {
+//            Vector3 inter1 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[0] - triPoints.m_pt[1], triPoints.m_pt[0]);
+//            Vector3 inter2 = CalInterPoint(triPlane.m_vecNormal, triPlane.m_pt[0], triPoints.m_pt[0] - triPoints.m_pt[2], triPoints.m_pt[0]);
+//
+//            if (CheckPtOnTriangle(triPlane, inter1)) ptResult.push_back(inter1);
+//            if (CheckPtOnTriangle(triPlane, inter2)) ptResult.push_back(inter2);
+//        }
+//    }
+//    else // 有一个点位于三角平面上，另外两个点分别位于两边
+//    {
+//        if (relateToTriPlane[0] == ON && CheckPtOnTriangle(triPlane, triPoints.m_pt[0])) ptResult.push_back(triPoints.m_pt[0]);
+//        else if (relateToTriPlane[1] == ON && CheckPtOnTriangle(triPlane, triPoints.m_pt[1])) ptResult.push_back(triPoints.m_pt[0]);
+//        else if (relateToTriPlane[2] == ON && CheckPtOnTriangle(triPlane, triPoints.m_pt[2])) ptResult.push_back(triPoints.m_pt[0]);
+//    }
+//
+//    if (ptResult.empty())
+//    {
+//        return DISJOINT;
+//    }
+//
+//    std::move(begin(ptResult), end(ptResult), back_inserter(pts));
+//
+//    return INTERSECTION;
+//}
 
-            if (CheckPtOnTriangle(triPlane, inter1)) ptResult.push_back(inter1);
-            if (CheckPtOnTriangle(triPlane, inter2)) ptResult.push_back(inter2);
-        }
-    }
-    else // 有一个点位于三角平面上，另外两个点分别位于两边
-    {
-        if (relateToTriPlane[0] == ON && CheckPtOnTriangle(triPlane, triPoints.m_pt[0])) ptResult.push_back(triPoints.m_pt[0]);
-        else if (relateToTriPlane[1] == ON && CheckPtOnTriangle(triPlane, triPoints.m_pt[1])) ptResult.push_back(triPoints.m_pt[0]);
-        else if (relateToTriPlane[2] == ON && CheckPtOnTriangle(triPlane, triPoints.m_pt[2])) ptResult.push_back(triPoints.m_pt[0]);
-    }
-
-    if (ptResult.empty())
-    {
-        return DISJOINT;
-    }
-
-    std::move(begin(ptResult), end(ptResult), back_inserter(pts));
-
-    return INTERSECTION;
-}
-
-void TriIntersectTestCase()
-{
-    {
-        Triangle tr1(Vector3(0, 0, 0), Vector3(1, 0, 1), Vector3(0, 1, 1));
-        Triangle tr2(Vector3(1, 1, 0), Vector3(1, 1, 1), Vector3(0, 0, 1));
-
-        std::vector<Vector3> pts;
-        auto type = GetIntersectionPoints(tr1, tr2, pts);
-
-        assert(type == INTERSECTION);
-        std::cout << "Intersection points: \n";
-        for (int i = 0; i < pts.size(); ++i)
-        {
-            std::cout << "=====" << "\n";
-            std::cout << pts[i].x << "\n";
-        }
-    }
-
-    {
-        Triangle tr1(Vector3(0, 0, 0), Vector3(0, 0, 1), Vector3(1, 1, 0));
-        Triangle tr2(Vector3(1, 1, 0), Vector3(1, 1, 1), Vector3(0, 0, 1));
-
-        std::vector<Vector3> pts;
-        auto type = GetIntersectionPoints(tr1, tr2, pts);
-
-        assert(type == COPLANE);
-        assert(pts.size() == 0);
-    }
-
-    {
-        Triangle tr1(Vector3(0, 0, 0), Vector3(0, 0, 1), Vector3(1, 1, 0));
-        Triangle tr2(Vector3(1, 0, 1), Vector3(0, 1, 1), Vector3(1, 1, 1));
-
-        std::vector<Vector3> pts;
-        auto type = GetIntersectionPoints(tr1, tr2, pts);
-
-        assert(type == DISJOINT);
-        assert(pts.size() == 0);
-    }
-}
+//void TriIntersectTestCase()
+//{
+//    {
+//        Triangle tr1(Vector3(0, 0, 0), Vector3(1, 0, 1), Vector3(0, 1, 1));
+//        Triangle tr2(Vector3(1, 1, 0), Vector3(1, 1, 1), Vector3(0, 0, 1));
+//
+//        std::vector<Vector3> pts;
+//        auto type = GetIntersectionPoints(tr1, tr2, pts);
+//
+//        assert(type == INTERSECTION);
+//        std::cout << "Intersection points: \n";
+//        for (int i = 0; i < pts.size(); ++i)
+//        {
+//            std::cout << "=====" << "\n";
+//            std::cout << pts[i].x << "\n";
+//        }
+//    }
+//
+//    {
+//        Triangle tr1(Vector3(0, 0, 0), Vector3(0, 0, 1), Vector3(1, 1, 0));
+//        Triangle tr2(Vector3(1, 1, 0), Vector3(1, 1, 1), Vector3(0, 0, 1));
+//
+//        std::vector<Vector3> pts;
+//        auto type = GetIntersectionPoints(tr1, tr2, pts);
+//
+//        assert(type == COPLANE);
+//        assert(pts.size() == 0);
+//    }
+//
+//    {
+//        Triangle tr1(Vector3(0, 0, 0), Vector3(0, 0, 1), Vector3(1, 1, 0));
+//        Triangle tr2(Vector3(1, 0, 1), Vector3(0, 1, 1), Vector3(1, 1, 1));
+//
+//        std::vector<Vector3> pts;
+//        auto type = GetIntersectionPoints(tr1, tr2, pts);
+//
+//        assert(type == DISJOINT);
+//        assert(pts.size() == 0);
+//    }
+//}
 
 const float EPSILON = std::numeric_limits<float>::epsilon();
 bool ComputePointWithLineAndTriangle(const Line3d& line, const Triangle& tri, Vector3& point)
