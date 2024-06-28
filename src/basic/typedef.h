@@ -879,7 +879,7 @@ namespace base_type {
             //update face static index
         }
 
-        void save(std::string save_path, std::string save_name, bool bSave_vtu = true, bool bSave_obj = false) {
+        void save(std::string save_path, std::string save_name, bool bSave_vtu = false, bool bSave_obj = true) {
             //save file
             ASSERT_MSG(bSave_vtu || bSave_obj, "set at least one file extension be TRUE");
             using namespace Mesh_Loader;
@@ -890,11 +890,11 @@ namespace base_type {
 
             //find
             int special_edge_num = 0;
-            for (int j = 0; j < edge_pool.size(); j++) {
-                auto e = (Edge *) edge_pool[j];
-                if (e->special)
-                    special_edge_num++;
-            }
+            //for (int j = 0; j < edge_pool.size(); j++) {
+            //    auto e = (Edge *) edge_pool[j];
+            //    if (e->special)
+            //        special_edge_num++;
+            //}
 
             data.set_cell_number(face_pool.size() + special_edge_num);
 //            data.set_edge_number(edge_pool.size());
@@ -921,23 +921,23 @@ namespace base_type {
 
             int index = face_pool.size();
 
-            for (int j = 0; j < edge_pool.size(); j++) {
-                const auto &e = (Edge *) edge_pool[j];
-                if (e->special == false)
-                    continue;
-                data.cellList[index].pointList = new int[2];
-                data.cellList[index].numberOfPoints = 2;
+            //for (int j = 0; j < edge_pool.size(); j++) {
+            //    const auto &e = (Edge *) edge_pool[j];
+            //    if (e->special == false)
+            //        continue;
+            //    data.cellList[index].pointList = new int[2];
+            //    data.cellList[index].numberOfPoints = 2;
 
-                data.cellList[index].pointList[0] = e->orig->static_index;
-                data.cellList[index].pointList[1] = e->end->static_index;
-                index++;
-            }
+            //    data.cellList[index].pointList[0] = e->orig->static_index;
+            //    data.cellList[index].pointList[1] = e->end->static_index;
+            //    index++;
+            //}
 
 
-            auto full_path = path_join(save_path, save_name + ".vtu");
-            if (bSave_vtu)
-                ASSERT_MSG(save_vtu(full_path.c_str(), data), "save fail");
-            full_path = path_join(save_path, save_name + ".obj");
+            auto full_path = path_join(save_path, save_name + ".obj");
+            //if (bSave_vtu)
+            //    ASSERT_MSG(save_vtu(full_path.c_str(), data), "save fail");
+            //full_path = path_join(save_path, save_name + ".obj");
 
             if (bSave_obj)
                 ASSERT_MSG(save_obj(full_path.c_str(), data), "save fail");
@@ -1183,8 +1183,8 @@ namespace base_type {
                 }
             }
 
-            auto full_path = path_join(save_path, save_name + ".vtu");
-            ASSERT_MSG(save_vtu(full_path.c_str(), data), "save fail");
+            //auto full_path = path_join(save_path, save_name + ".vtu");
+            //ASSERT_MSG(save_vtu(full_path.c_str(), data), "save fail");
         }
 
         void slot_shrink(std::vector<int> &cell_class_array, std::map<int, int> &cell_class_map) {

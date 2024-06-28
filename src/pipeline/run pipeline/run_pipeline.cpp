@@ -765,7 +765,7 @@ void surface_cut() {
 		part.save("D:/xmy/model", "output_Curve" + std::to_string(part_index++));
 	} while (unmarked_face_Curve);
 
-	meshCurve2.load_from_file("D:/xmy/model/output_Curve1.vtu");
+	meshCurve2.load_from_file("D:/xmy/model/output_Curve1.obj");
 
 	part_index = 0;
 	do {
