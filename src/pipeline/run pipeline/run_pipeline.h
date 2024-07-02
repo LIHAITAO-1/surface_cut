@@ -9,7 +9,7 @@
 //#include "pipeline/mesh fix/triangle_soup_surface_mesh_normal_fix.h"
 
 
-void surface_cut();
+void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile);
 
 
 

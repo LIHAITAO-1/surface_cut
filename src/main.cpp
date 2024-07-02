@@ -63,8 +63,10 @@ int main(int argc, char **argv) {
 
     tbb::task_scheduler_init scheduler(num_threads, stack_size);
 
-
-    surface_cut();
+    std::string Path = "D:/xmy/model/";
+    std::string MeshFile = "8-2.obj";
+    std::string CurveFile = "fm38.obj";
+    surface_cut(Path, MeshFile, CurveFile);
 
 
     return 0;

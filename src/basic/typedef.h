@@ -373,6 +373,7 @@ namespace base_type {
                 return f->disjoin_edge[1];
             if (edge_equel(f->disjoin_edge[2], v1, v2))
                 return f->disjoin_edge[2];
+            return nullptr;
         }
 
         static void face_swap(Face *f1, Face *f2) {
@@ -383,14 +384,19 @@ namespace base_type {
             assert(is_disjoin_face(f1, f2));
             auto share_edge = get_share_edge(f1, f2);
 
-            auto [non_share_f1_e0, non_share_f1_e1] = get_non_share_edge(f2, f1);
-            auto [non_share_f2_e0, non_share_f2_e1] = get_non_share_edge(f1, f2);
+            std::pair<Edge*, Edge*> edge21 = get_non_share_edge(f2, f1);
+            std::pair<Edge*, Edge*> edge12 = get_non_share_edge(f1, f2);
+            Edge* non_share_f1_e0 = edge21.first;
+            Edge* non_share_f1_e1 = edge21.second;
+            Edge* non_share_f2_e0 = edge12.first;
+            Edge* non_share_f2_e1 = edge12.second;
+
             if (Edge::is_connected(non_share_f1_e0, non_share_f2_e0) == false)
                 std::swap(non_share_f2_e0, non_share_f2_e1);
 
             auto share_vtx_e0 = share_edge->orig;
             auto share_vtx_e1 = share_edge->end;
-            Vertex *v_connect;
+            Vertex *v_connect = nullptr;
             assert(Edge::is_connected(non_share_f1_e0, non_share_f2_e0, v_connect));
             if (v_connect != share_vtx_e0)
                 std::swap(share_vtx_e0, share_vtx_e1);
@@ -611,6 +617,26 @@ namespace base_type {
             face_pool.initializePool(sizeof(Face), 1000 * 1.2, 8, 32);
         }
 
+        void copy_no_edge(Triangle_Soup_Mesh& mesh) {
+            for (int i = 0; i < mesh.face_pool.size(); i++) {
+                auto f = (base_type::Face*)mesh.face_pool[i];
+                auto v1 = Vertex::allocate_from_pool(&this->vertex_pool, f->p1->position);
+                auto v2 = Vertex::allocate_from_pool(&this->vertex_pool, f->p2->position);
+                auto v3 = Vertex::allocate_from_pool(&this->vertex_pool, f->p3->position);
+                Face::allocate_from_pool(&this->face_pool, v1, v2, v3);
+            }
+        }
+
+        void copy(Triangle_Soup_Mesh& mesh) {
+            for (int i = 0; i < mesh.face_pool.size(); i++) {
+                auto f = (base_type::Face*)mesh.face_pool[i];
+                auto v1 = Vertex::allocate_from_pool(&this->vertex_pool, f->p1->position);
+                auto v2 = Vertex::allocate_from_pool(&this->vertex_pool, f->p2->position);
+                auto v3 = Vertex::allocate_from_pool(&this->vertex_pool, f->p3->position);
+                Face::allocate_from_pool(&this->face_pool, v1, v2, v3);
+            }
+            this->connect_edge_by_face();
+        }
 
         void clear() {
             vertex_pool.restart();

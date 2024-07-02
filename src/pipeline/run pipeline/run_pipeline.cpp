@@ -17,7 +17,8 @@ using namespace base_type;
 enum Vtx_state {
 	Inside,
 	OnEdge,
-	OnVtx
+	OnVtx,
+	Other
 };
 
 
@@ -83,12 +84,14 @@ struct CompareObjects {
 	int axis;
 	CompareObjects(int axis) : axis(axis) {}
 	bool operator()(const Object& a, const Object& b) const {
+		assert(axis == 0 || axis == 1 || axis == 2);
 		if (axis == 0)
 			return a.bounds.min.x < b.bounds.min.x;
 		if (axis == 1)
 			return a.bounds.min.y < b.bounds.min.y;
 		if (axis == 2)
 			return a.bounds.min.z < b.bounds.min.z;
+		return false;
 	}
 };
 
@@ -133,7 +136,7 @@ BVHNode* createBVH(std::vector<Object>& objects, int start, int end) {
 	return node;
 }
 
-void surface_cut() {
+void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) {
 	auto get_vtx_state = [](double a, double b) {
 		if ((a + b) < 1 - 1e-6 && a > 1e-6 && b > 1e-6) {
 			return Inside;
@@ -146,7 +149,8 @@ void surface_cut() {
 		if (abs(a) < 1e-6 || abs(b) < 1e-6 || abs((a + b) - 1) < 1e-6) {
 			return OnEdge;
 		}
-		};
+		return Other;
+	};
 
 	auto point_uv_calulate_triangle = [](Triangle3d tri, base_type::Vector3 intersection) -> std::pair<double, double> {
 		auto u = tri.p2 - tri.p1;
@@ -241,7 +245,7 @@ void surface_cut() {
 
 			Vertex* v_orig = e->orig;
 			Vertex* v_end = e->end;
-			Vertex* v_t1;
+			Vertex* v_t1 = nullptr;
 
 			if (f1->p1 != v_orig && f1->p1 != v_end) {
 				v_t1 = f1->p1;
@@ -296,7 +300,9 @@ void surface_cut() {
 		if (e->connect_face_array->size() == 0) {
 			assert(false);
 		}
-		};
+		std::pair<Vertex*, std::array<Edge*, 2>> result_error(nullptr, {});
+		return result_error;
+	};
 
 	auto tri_split = [get_vtx_state, point_uv_calulate_triangle, &edge_split](Triangle_Soup_Mesh& mesh, base_type::Face* f, base_type::Vector3& p, Face*& f1_new, Face*& f2_new, Face*& f3_new, Vertex*& new_vtx) {
 		double alpha, beta;
@@ -500,7 +506,8 @@ void surface_cut() {
 
 			switch (c_r.cut_case) {
 			case P1_P2_Inside: {
-				Vertex* new_v1, * new_v2;
+				Vertex* new_v1 = nullptr;
+				Vertex* new_v2 = nullptr;
 				Face* f1, * f2, * f3;
 				Face* f11, * f22, * f33;
 
@@ -531,7 +538,8 @@ void surface_cut() {
 				break;
 			}
 			case P1_Inside_P2_OnEdge: {
-				Vertex* new_v1, * new_v2;
+				Vertex* new_v1 = nullptr;
+				Vertex* new_v2 = nullptr;
 				Face* f1, * f2, * f3;
 				std::array<Edge*, 2> new_e1;
 
@@ -546,7 +554,8 @@ void surface_cut() {
 				break;
 			}
 			case P1_OnEdge_P2_Inside: {
-				Vertex* new_v1, * new_v2;
+				Vertex* new_v1 = nullptr;
+				Vertex* new_v2 = nullptr;
 				Face* f1, * f2, * f3;
 				std::array<Edge*, 2> new_e1;
 
@@ -562,7 +571,8 @@ void surface_cut() {
 			}
 
 			case P1_P2_OnEdge: {
-				Vertex* new_v1, * new_v2;
+				Vertex* new_v1 = nullptr;
+				Vertex* new_v2 = nullptr;
 				std::array<Edge*, 2> new_e1, new_e2;
 
 				std::tie(new_v1, new_e1) = edge_split(mesh, c_r.c_e[0], p1);
@@ -576,7 +586,8 @@ void surface_cut() {
 			}
 
 			case P1_OnVtx_P2_Inside: {
-				Vertex* new_v1, * new_v2;
+				Vertex* new_v1 = nullptr;
+				Vertex* new_v2 = nullptr;
 				Face* f1, * f2, * f3;
 
 				if (p1.distance(f_mesh->p1->position) < 1e-6) {
@@ -598,7 +609,8 @@ void surface_cut() {
 				break;
 			}
 			case P1_Inside_P2_OnVtx: {
-				Vertex* new_v1, * new_v2;
+				Vertex* new_v1 = nullptr;
+				Vertex* new_v2 = nullptr;
 				Face* f1, * f2, * f3;
 
 				if (p2.distance(f_mesh->p1->position) < 1e-6) {
@@ -621,7 +633,7 @@ void surface_cut() {
 			}
 
 			case P1_OnVtx_P2_OnEdge: {
-				Vertex* new_v;
+				Vertex* new_v = nullptr;
 				std::array<Edge*, 2> new_e;
 				std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[1], p2);
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[0]);
@@ -643,7 +655,8 @@ void surface_cut() {
 			}
 
 			case P1_P2_OnVtx: {
-				Vertex* new_v1, * new_v2;
+				Vertex* new_v1 = nullptr;
+				Vertex* new_v2 = nullptr;
 				new_v1 = c_r.c_v[0];
 				new_v2 = c_r.c_v[1];
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
@@ -664,19 +677,20 @@ void surface_cut() {
 
 			goto insert_start;
 		}
-		};
+	};
 
-	std::string path;
-
+	
 	logger().info("Step 1: Compute Point");
+
 	Triangle_Soup_Mesh meshCube;
 	Triangle_Soup_Mesh meshCube2;
 	Triangle_Soup_Mesh meshCurve;
 	Triangle_Soup_Mesh meshCurve2;
 
-	meshCube.load_from_file("D:/xmy/model/8-2.obj");
-	meshCube2.load_from_file("D:/xmy/model/8-2.obj");
-	meshCurve.load_from_file("D:/xmy/model/fm38.obj");
+	meshCube.load_from_file(Path + MeshFile);
+	//meshCube2.load_from_file(Path + MeshFile);
+	meshCube2.copy(meshCube);
+	meshCurve.load_from_file(Path + CurveFile);
 
 	//step 1: use meshCurve to subdivide meshCube
 
@@ -701,9 +715,7 @@ void surface_cut() {
 		insert_one_tri(meshCube, root, f);
 	}
 
-
-
-	meshCube.save("D:/xmy/model", "output");
+	meshCube.save(Path, "output");
 
 	for (int i = 0; i < meshCube2.face_pool.size(); i++) {
 		//for (int i = 0; i < 100; i++) {
@@ -711,7 +723,7 @@ void surface_cut() {
 		insert_one_tri(meshCurve, root, f);
 	}
 
-	meshCurve.save("D:/xmy/model", "outputCurve");
+	meshCurve.save(Path, "outputCurve");
 
 	//step 2: depart mesh by special edge
 	auto get_unmarked_face = [](Triangle_Soup_Mesh& mesh) -> Face* {
@@ -762,10 +774,13 @@ void surface_cut() {
 			auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
 			Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
 		}
-		part.save("D:/xmy/model", "output_Curve" + std::to_string(part_index++));
+		if (part_index == 1) {
+			meshCurve2.copy_no_edge(part);
+		}
+		part.save(Path, "output_Curve" + std::to_string(part_index++));
 	} while (unmarked_face_Curve);
 
-	meshCurve2.load_from_file("D:/xmy/model/output_Curve1.obj");
+	//meshCurve2.load_from_file("D:/xmy/model/output_Curve1.obj");
 
 	part_index = 0;
 	do {
@@ -812,7 +827,7 @@ void surface_cut() {
 			auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
 			Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
 		}
-		part.save("D:/xmy/model", "output_Cube" + std::to_string(part_index++));
+		part.save(Path, "output_Cube" + std::to_string(part_index++));
 	} while (unmarked_face);
 
 	logger().info("end");
