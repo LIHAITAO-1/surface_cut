@@ -47,23 +47,39 @@ struct Cut_result {
 };
 
 struct AABB {
-	base_type::Vector3 min;
-	base_type::Vector3 max;
+	Vector3 min;
+	Vector3 max;
 
-	base_type::Vector3 getCenter() const {
-		return base_type::Vector3((min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2);
+	AABB() : min{ FLT_MAX, FLT_MAX, FLT_MAX }, max{ -FLT_MAX, -FLT_MAX, -FLT_MAX } {}
+
+	void expand(const Vector3& point) {
+		min.x = std::min(min.x, point.x);
+		min.y = std::min(min.y, point.y);
+		min.z = std::min(min.z, point.z);
+		max.x = std::max(max.x, point.x);
+		max.y = std::max(max.y, point.y);
+		max.z = std::max(max.z, point.z);
 	}
 
-	double getCenterX() const {
-		return getCenter().x;
+	bool overlaps(const AABB& other) const {
+		return (min.x <= other.max.x && max.x >= other.min.x &&
+			min.y <= other.max.y && max.y >= other.min.y &&
+			min.z <= other.max.z && max.z >= other.min.z);
 	}
 };
 
-bool aabbIntersect(const AABB& A, const AABB& B) {
-	// 两个AABB不相交的条件
-	return !(A.max.x < B.min.x || A.min.x > B.max.x ||
-		A.max.y < B.min.y || A.min.y > B.max.y ||
-		A.max.z < B.min.z || A.min.z > B.max.z);
+AABB computeAABB(const Face& face) {
+	AABB box;
+	box.expand(face.p1->position);
+	box.expand(face.p2->position);
+	box.expand(face.p3->position);
+	return box;
+}
+
+bool isIntersecting(const AABB& box1, const AABB& box2) {
+	return (box1.min.x <= box2.max.x && box1.max.x >= box2.min.x &&
+		box1.min.y <= box2.max.y && box1.max.y >= box2.min.y &&
+		box1.min.z <= box2.max.z && box1.max.z >= box2.min.z);
 }
 
 struct Object {
@@ -72,69 +88,165 @@ struct Object {
 	// 其他物体相关的属性
 };
 
-// BVH节点
 struct BVHNode {
 	AABB bounds;
 	BVHNode* left;
 	BVHNode* right;
+	Object* object;
+
+	BVHNode() : left(nullptr), right(nullptr), object(nullptr) {}
 };
 
-// 为了构建BVH树，定义一个比较函数，根据最长轴进行排序
-struct CompareObjects {
-	int axis;
-	CompareObjects(int axis) : axis(axis) {}
-	bool operator()(const Object& a, const Object& b) const {
-		assert(axis == 0 || axis == 1 || axis == 2);
+BVHNode* buildBVH(std::vector<Object*>& objects) {
+	if (objects.empty()) return nullptr;
+
+	BVHNode* node = new BVHNode();
+	AABB bounds;
+	for (const auto& obj : objects) {
+		bounds.expand(obj->bounds.min);
+		bounds.expand(obj->bounds.max);
+	}
+	node->bounds = bounds;
+
+	if (objects.size() == 1) {
+		node->object = objects[0];
+		return node;
+	}
+
+	// 分割轴选择和排序
+	int axis = 0; // 0: x, 1: y, 2: z
+	if (bounds.max.y - bounds.min.y > bounds.max.x - bounds.min.x) axis = 1;
+	if (bounds.max.z - bounds.min.z > bounds.max.x - bounds.min.x && bounds.max.z - bounds.min.z > bounds.max.y - bounds.min.y) axis = 2;
+
+	std::sort(objects.begin(), objects.end(), [axis](Object* a, Object* b) {
 		if (axis == 0)
-			return a.bounds.min.x < b.bounds.min.x;
+			return a->bounds.min.x < b->bounds.min.x;
 		if (axis == 1)
-			return a.bounds.min.y < b.bounds.min.y;
+			return a->bounds.min.y < b->bounds.min.y;
 		if (axis == 2)
-			return a.bounds.min.z < b.bounds.min.z;
-		return false;
-	}
-};
+			return a->bounds.min.z < b->bounds.min.z;
+		});
 
-// 递归构建BVH树
-BVHNode* createBVH(std::vector<Object>& objects, int start, int end) {
-	BVHNode* node = new BVHNode;
+	size_t mid = objects.size() / 2;
+	std::vector<Object*> left(objects.begin(), objects.begin() + mid);
+	std::vector<Object*> right(objects.begin() + mid, objects.end());
 
-	if (start == end) {
-		node->bounds = objects[start].bounds;
-		node->left = nullptr;
-		node->right = nullptr;
-	}
-	else {
-		AABB box;
-		for (int i = start; i <= end; ++i) {
-			box.min.x = std::min(box.min.x, objects[i].bounds.min.x);
-			box.min.y = std::min(box.min.y, objects[i].bounds.min.y);
-			box.min.z = std::min(box.min.z, objects[i].bounds.min.z);
-			box.max.x = std::max(box.max.x, objects[i].bounds.max.x);
-			box.max.y = std::max(box.max.y, objects[i].bounds.max.y);
-			box.max.z = std::max(box.max.z, objects[i].bounds.max.z);
-		}
-
-		base_type::Vector3 center = base_type::Vector3((box.min.x + box.max.x) / 2,
-			(box.min.y + box.max.y) / 2,
-			(box.min.z + box.max.z) / 2);
-
-		base_type::Vector3 extent = box.max - box.min;
-		int longestAxis = 0;
-		if (extent.y > extent.x) longestAxis = 1;
-		if (extent.z > extent.y && extent.z > extent.x) longestAxis = 2;
-
-		std::sort(objects.begin() + start, objects.begin() + end + 1, CompareObjects(longestAxis));
-
-		int mid = start + (end - start) / 2;
-
-		node->left = createBVH(objects, start, mid);
-		node->right = createBVH(objects, mid + 1, end);
-		node->bounds = box;
-	}
+	node->left = buildBVH(left);
+	node->right = buildBVH(right);
 
 	return node;
 }
+void insertObject(BVHNode*& node, Object* object) {
+	if (!node) {
+		node = new BVHNode();
+		node->object = object;
+		node->bounds = object->bounds;
+		return;
+	}
+
+	if (node->object) {
+		Object* existingObject = node->object;
+		node->object = nullptr;
+		node->left = new BVHNode();
+		node->left->object = existingObject;
+		node->left->bounds = existingObject->bounds;
+
+		node->right = new BVHNode();
+		node->right->object = object;
+		node->right->bounds = object->bounds;
+	}
+	else {
+		AABB leftBounds = node->left ? node->left->bounds : AABB();
+		AABB rightBounds = node->right ? node->right->bounds : AABB();
+
+		leftBounds.expand(object->bounds.min);
+		leftBounds.expand(object->bounds.max);
+
+		rightBounds.expand(object->bounds.min);
+		rightBounds.expand(object->bounds.max);
+
+		if (leftBounds.max.x - leftBounds.min.x <
+			rightBounds.max.x - rightBounds.min.x) {
+			insertObject(node->left, object);
+			node->bounds.expand(node->left->bounds.min);
+			node->bounds.expand(node->left->bounds.max);
+		}
+		else {
+			insertObject(node->right, object);
+			node->bounds.expand(node->right->bounds.min);
+			node->bounds.expand(node->right->bounds.max);
+		}
+	}
+}
+bool removeObject(BVHNode*& node, Object* object) {
+	if (!node) return false;
+
+	if (node->object == object) {
+		delete node;
+		node = nullptr;
+		return true;
+	}
+
+	bool removed = false;
+	if (node->left && removeObject(node->left, object)) {
+		removed = true;
+		if (!node->left && !node->right) {
+			delete node;
+			node = nullptr;
+		}
+	}
+	else if (node->right && removeObject(node->right, object)) {
+		removed = true;
+		if (!node->left && !node->right) {
+			delete node;
+			node = nullptr;
+		}
+	}
+
+	return removed;
+}
+
+bool tri_tri_cut(base_type::Face* f1, base_type::Face* f2, base_type::Vector3& p1, base_type::Vector3& p2){
+	if (!isIntersecting(computeAABB(*f1), computeAABB(*f2))) {
+		return false;
+	}
+	Triangle tri1(f1->p1->position, f1->p2->position, f1->p3->position);
+	Triangle tri2(f2->p1->position, f2->p2->position, f2->p3->position);
+
+	vector<Vector3> pts;
+	if (ComputeLineWithTwoTriangle(tri1, tri2, pts)) {
+		p1 = pts[0];
+		p2 = pts[1];
+		return true;
+	}
+	else
+		return false;
+};
+
+bool inFaceVector(Face* f, vector<Face*> FaceArray) {
+	return std::find(FaceArray.begin(), FaceArray.end(), f) != FaceArray.end();
+}
+
+void AABB_intersection(BVHNode* root, base_type::Face* f_insert, vector<Face*>& interFaceArray, vector<Face*>& interFaceDeleteArray, bool& b) {
+	if (root == nullptr)
+		return;
+
+	if (!isIntersecting(computeAABB(*f_insert), root->bounds))
+		return;
+
+	if (root->left == nullptr && root->right == nullptr) {
+		Vector3 p1, p2;
+		if (tri_tri_cut(root->object->face, f_insert, p1, p2)) {
+			if (!inFaceVector(root->object->face, interFaceDeleteArray))
+				interFaceArray.push_back(root->object->face);
+			else
+				b = true;
+		}
+	}
+	AABB_intersection(root->left, f_insert, interFaceArray, interFaceDeleteArray, b);
+	AABB_intersection(root->right, f_insert, interFaceArray, interFaceDeleteArray, b);
+};
+
 
 void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) {
 	auto get_vtx_state = [](double a, double b) {
@@ -167,7 +279,7 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 		return { alpha, beta };
 		};
 
-	auto edge_split = [](Triangle_Soup_Mesh& mesh, base_type::Edge* e, const base_type::Vector3& p) -> std::pair<Vertex*, std::array<Edge*, 2> > {
+	auto edge_split = [](Triangle_Soup_Mesh& mesh, base_type::Edge* e, const base_type::Vector3& p, Face*& new_f1, Face*& new_f2, vector<Face*>& interFaceArray, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray) -> std::pair<Vertex*, std::array<Edge*, 2> > {
 
 		//     orig
 		//     /|\            /|\
@@ -199,8 +311,8 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			Edge* e_t22 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_orig)];
 
 			//new
-			Face* new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
-			Face* new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t2, v_end, new_vtx);
+			new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
+			new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t2, v_end, new_vtx);
 
 			Edge* new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
 			Edge* new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
@@ -236,6 +348,11 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			Edge::add_connect_face(e_t12, new_f1);
 			Edge::add_connect_face(e_t22, new_f2);
 
+			interFaceAddArray.push_back(new_f1);
+			interFaceAddArray.push_back(new_f2);
+			interFaceArray.push_back(new_f1);
+			interFaceArray.push_back(new_f2);
+
 			std::array<Edge*, 2> new_edge({ new_e0, e });
 
 			return { new_vtx, new_edge };
@@ -258,8 +375,8 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			}
 
 			//new
-			Face* new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_orig, new_vtx);
-			Face* new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
+			new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_orig, new_vtx);
+			new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
 
 			Edge* new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_orig);
 			Edge* new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
@@ -289,9 +406,19 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			//            new_f1->mark = true;
 			//            new_f2->mark = true;
 
-						//delete
+			interFaceAddArray.push_back(new_f1);
+			interFaceAddArray.push_back(new_f2);
+			interFaceArray.push_back(new_f1);
+			interFaceArray.push_back(new_f2);
+			interFaceDeleteArray.push_back(f1);
+
+			interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f1), interFaceArray.end());
+
+			//delete
 			mesh.face_pool.deallocate(f1);
 			mesh.edge_pool.deallocate(e);
+
+
 
 			std::array<Edge*, 2> new_edge({ new_e2, e });
 
@@ -304,8 +431,10 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 		return result_error;
 	};
 
-	auto tri_split = [get_vtx_state, point_uv_calulate_triangle, &edge_split](Triangle_Soup_Mesh& mesh, base_type::Face* f, base_type::Vector3& p, Face*& f1_new, Face*& f2_new, Face*& f3_new, Vertex*& new_vtx) {
+	auto tri_split = [get_vtx_state, point_uv_calulate_triangle, &edge_split](Triangle_Soup_Mesh& mesh, base_type::Face* f, base_type::Vector3& p, Face*& f1_new, Face*& f2_new, Face*& f3_new, Vertex*& new_vtx, vector<Face*>& interFaceArray, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray) {
 		double alpha, beta;
+		Face* f11;
+		Face* f22;
 
 		std::tie(alpha, beta) = point_uv_calulate_triangle({ f->p1->position, f->p2->position, f->p3->position }, p);
 		Vtx_state vtx_state = get_vtx_state(alpha, beta);
@@ -313,7 +442,7 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 		if (vtx_state == OnEdge) {
 			std::array<Edge*, 2> new_e1;
 			Edge* e = abs(1 - alpha - beta) < 1e-6 ? f->disjoin_edge[0] : (abs(alpha) < 1e-6 ? f->disjoin_edge[1] : f->disjoin_edge[2]);
-			std::tie(new_vtx, new_e1) = edge_split(mesh, e, p);
+			std::tie(new_vtx, new_e1) = edge_split(mesh, e, p, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
 		}
 		else if (vtx_state == Inside) {
 
@@ -371,26 +500,22 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			f3_new->mark = true;
 
 			//delete
-			mesh.face_pool.deallocate(f);
 
+			interFaceAddArray.push_back(f1_new);
+			interFaceAddArray.push_back(f2_new);
+			interFaceAddArray.push_back(f3_new);
+			interFaceArray.push_back(f1_new);
+			interFaceArray.push_back(f2_new);
+			interFaceArray.push_back(f3_new);
+			interFaceDeleteArray.push_back(f);
+
+			interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f), interFaceArray.end());
+
+			mesh.face_pool.deallocate(f);
 		}
 		else {
 			assert(false);
 		}
-		};
-
-	auto tri_tri_cut = [&](base_type::Face* f1, base_type::Face* f2, base_type::Vector3& p1, base_type::Vector3& p2) -> bool {
-		Triangle tri1(f1->p1->position, f1->p2->position, f1->p3->position);
-		Triangle tri2(f2->p1->position, f2->p2->position, f2->p3->position);
-
-		vector<Vector3> pts;
-		if (ComputeLineWithTwoTriangle(tri1, tri2, pts)) {
-			p1 = pts[0];
-			p2 = pts[1];
-			return true;
-		}
-		else
-			return false;
 		};
 
 	auto clear_all_tri_mark = [](Triangle_Soup_Mesh& mesh) {
@@ -464,32 +589,16 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 		return cut_result;
 		};
 
-	auto insert_one_tri = [&](Triangle_Soup_Mesh& mesh, BVHNode* root, base_type::Face* f_insert) {
-		//if (root == nullptr)
-		//    return;
-		//AABB aabb;
-		//aabb.min.x = std::min(std::min(f_insert->p1->position.x, f_insert->p2->position.x), f_insert->p3->position.x);
-		//aabb.min.y = std::min(std::min(f_insert->p1->position.y, f_insert->p2->position.y), f_insert->p3->position.y);
-		//aabb.min.z = std::min(std::min(f_insert->p1->position.z, f_insert->p2->position.z), f_insert->p3->position.z);
-		//aabb.max.x = std::max(std::max(f_insert->p1->position.x, f_insert->p2->position.x), f_insert->p3->position.x);
-		//aabb.max.y = std::max(std::max(f_insert->p1->position.y, f_insert->p2->position.y), f_insert->p3->position.y);
-		//aabb.max.z = std::max(std::max(f_insert->p1->position.z, f_insert->p2->position.z), f_insert->p3->position.z);
-		//if (!aabbIntersect(aabb, root->bounds))
-		//    return;
-		//if (root->left == nullptr && root->right == nullptr) {
-		//    clear_all_tri_mark(mesh);
-
-		//}
+	auto insert_one_tri = [&](Triangle_Soup_Mesh& mesh, vector<Face*>& interFaceArray, base_type::Face* f_insert, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray) {
 
 		clear_all_tri_mark(mesh);
 
 	insert_start:
-		for (int i = 0; i < mesh.face_pool.size(); i++) {
-			if (i == 3)
-				int aaaa = 0;
+		for (int i = 0; i < interFaceArray.size(); i++) {
 
-			base_type::Face* f_mesh = (base_type::Face*)mesh.face_pool[i];
+			base_type::Face* f_mesh = (base_type::Face*)interFaceArray[i];
 			if (f_mesh->mark == true) {
+				//interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f_mesh), interFaceArray.end());
 				continue;
 			}
 			else {
@@ -511,21 +620,25 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 				Face* f1, * f2, * f3;
 				Face* f11, * f22, * f33;
 
-				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1);
+				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 				Triangle tri = Triangle(f1->p1->position, f1->p2->position, f1->p3->position);
 				bool flag = true;
 				if (InTriangle(tri, p2) != -1 && flag) {
-					tri_split(mesh, f1, p2, f11, f22, f33, new_v2);
+					tri_split(mesh, f1, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 					flag = false;
 				}
 				tri = Triangle(f2->p1->position, f2->p2->position, f2->p3->position);
 				if (InTriangle(tri, p2) != -1 && flag) {
-					tri_split(mesh, f2, p2, f11, f22, f33, new_v2);
+					tri_split(mesh, f2, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 					flag = false;
 				}
 				tri = Triangle(f3->p1->position, f3->p2->position, f3->p3->position);
 				if (InTriangle(tri, p2) != -1 && flag) {
-					tri_split(mesh, f3, p2, f11, f22, f33, new_v2);
+					tri_split(mesh, f3, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 					flag = false;
 				}
 
@@ -541,10 +654,13 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 				Vertex* new_v1 = nullptr;
 				Vertex* new_v2 = nullptr;
 				Face* f1, * f2, * f3;
+				Face* f11, * f22;
 				std::array<Edge*, 2> new_e1;
 
-				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1);
-				std::tie(new_v2, new_e1) = edge_split(mesh, c_r.c_e[0], p2);
+				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+				std::tie(new_v2, new_e1) = edge_split(mesh, c_r.c_e[0], p2, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
 				edge_find->special = true;
@@ -557,10 +673,12 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 				Vertex* new_v1 = nullptr;
 				Vertex* new_v2 = nullptr;
 				Face* f1, * f2, * f3;
+				Face* f11, * f22;
 				std::array<Edge*, 2> new_e1;
 
-				tri_split(mesh, f_mesh, p2, f1, f2, f3, new_v1);
-				std::tie(new_v2, new_e1) = edge_split(mesh, c_r.c_e[0], p1);
+				tri_split(mesh, f_mesh, p2, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+				std::tie(new_v2, new_e1) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
 
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
 				edge_find->special = true;
@@ -574,9 +692,11 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 				Vertex* new_v1 = nullptr;
 				Vertex* new_v2 = nullptr;
 				std::array<Edge*, 2> new_e1, new_e2;
+				Face* f11, * f22, * f33, * f44;
 
-				std::tie(new_v1, new_e1) = edge_split(mesh, c_r.c_e[0], p1);
-				std::tie(new_v2, new_e2) = edge_split(mesh, c_r.c_e[1], p2);
+				std::tie(new_v1, new_e1) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+				std::tie(new_v2, new_e2) = edge_split(mesh, c_r.c_e[1], p2, f33, f44, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
 				edge_find->special = true;
 				tri_mark(*(edge_find->connect_face_array));
@@ -600,7 +720,8 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 					new_v1 = f_mesh->p3;
 				}
 
-				tri_split(mesh, f_mesh, p2, f1, f2, f3, new_v2);
+				tri_split(mesh, f_mesh, p2, f1, f2, f3, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
 				edge_find->special = true;
 				//                    tri_mark(*(edge_find->connect_face_array));
@@ -623,7 +744,8 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 					new_v2 = f_mesh->p3;
 				}
 
-				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1);
+				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
 				edge_find->special = true;
 				//                    tri_mark(*(edge_find->connect_face_array));
@@ -635,7 +757,9 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			case P1_OnVtx_P2_OnEdge: {
 				Vertex* new_v = nullptr;
 				std::array<Edge*, 2> new_e;
-				std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[1], p2);
+				Face* f11, * f22;
+				std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[1], p2, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[0]);
 				edge_find->special = true;
 				tri_mark(*(edge_find->connect_face_array));
@@ -645,7 +769,9 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			case P1_OnEdge_P2_OnVtx: {
 				Vertex* new_v;
 				std::array<Edge*, 2> new_e;
-				std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[0], p1);
+				Face* f11, * f22;
+				std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
 				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[1]);
 				edge_find->special = true;
 				tri_mark(*(edge_find->connect_face_array));
@@ -679,7 +805,6 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 		}
 	};
 
-	
 	logger().info("Step 1: Compute Point");
 
 	Triangle_Soup_Mesh meshCube;
@@ -694,33 +819,69 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 
 	//step 1: use meshCurve to subdivide meshCube
 
-	std::vector<Object> objects;
+	std::vector<Object*> objects_meshCube;
 	for (int i = 0; i < meshCube.face_pool.size(); i++) {
 		auto f = (base_type::Face*)meshCube.face_pool[i];
-		Object obj;
-		obj.bounds.min.x = std::min(std::min(f->p1->position.x, f->p2->position.x), f->p3->position.x);
-		obj.bounds.min.y = std::min(std::min(f->p1->position.y, f->p2->position.y), f->p3->position.y);
-		obj.bounds.min.z = std::min(std::min(f->p1->position.z, f->p2->position.z), f->p3->position.z);
-		obj.bounds.max.x = std::max(std::max(f->p1->position.x, f->p2->position.x), f->p3->position.x);
-		obj.bounds.max.y = std::max(std::max(f->p1->position.y, f->p2->position.y), f->p3->position.y);
-		obj.bounds.max.z = std::max(std::max(f->p1->position.z, f->p2->position.z), f->p3->position.z);
-		obj.face = f;
-		objects.push_back(obj);
+		Object* obj = new Object{ computeAABB(*f), f };
+		objects_meshCube.push_back(obj);
 	}
 
-	BVHNode* root = createBVH(objects, 0, objects.size() - 1);
+	BVHNode* root_meshCube = buildBVH(objects_meshCube);
+	
+	vector<Face*> interFaceDeleteArray;
+	vector<Face*> interFaceAddArray;
 
 	for (int i = 0; i < meshCurve.face_pool.size(); i++) {
 		auto f = (base_type::Face*)meshCurve.face_pool[i];
-		insert_one_tri(meshCube, root, f);
+		vector<Face*> interFaceArray;
+		bool DeleteFlag = false;
+		AABB_intersection(root_meshCube, f, interFaceArray, interFaceDeleteArray, DeleteFlag);
+		//if (interFaceArray.size() == 0 && !DeleteFlag) {
+		//	continue;
+		//}
+		for (auto interFaceAdd : interFaceAddArray) {
+			Vector3 p1, p2;
+			if (tri_tri_cut(interFaceAdd, f, p1, p2)) {
+				interFaceArray.push_back(interFaceAdd);
+			}
+		}
+		if (interFaceArray.size() != 0) {
+			insert_one_tri(meshCube, interFaceArray, f, interFaceDeleteArray, interFaceAddArray);
+		}
 	}
 
 	meshCube.save(Path, "output");
 
+	std::vector<Object*> objects_meshCurve;
+	for (int i = 0; i < meshCurve.face_pool.size(); i++) {
+		auto f = (base_type::Face*)meshCurve.face_pool[i];
+		Object* obj = new Object{ computeAABB(*f), f };
+		objects_meshCurve.push_back(obj);
+	}
+
+	BVHNode* root_meshCurve = buildBVH(objects_meshCurve);
+
+	interFaceDeleteArray.clear();
+	interFaceAddArray.clear();
+
 	for (int i = 0; i < meshCube2.face_pool.size(); i++) {
-		//for (int i = 0; i < 100; i++) {
 		auto f = (base_type::Face*)meshCube2.face_pool[i];
-		insert_one_tri(meshCurve, root, f);
+		vector<Face*> interFaceArray;
+		bool DeleteFlag = false;
+		AABB_intersection(root_meshCurve, f, interFaceArray, interFaceDeleteArray, DeleteFlag);
+		//if (interFaceArray.size() == 0 && !DeleteFlag) {
+		//	continue;
+		//}
+		for (auto interFaceAdd : interFaceAddArray){
+			Vector3 p1, p2;
+			if (tri_tri_cut(interFaceAdd, f, p1, p2)) {
+				interFaceArray.push_back(interFaceAdd);
+			}
+		}
+
+		if (interFaceArray.size() != 0) {
+			insert_one_tri(meshCurve, interFaceArray, f, interFaceDeleteArray, interFaceAddArray);
+		}
 	}
 
 	meshCurve.save(Path, "outputCurve");

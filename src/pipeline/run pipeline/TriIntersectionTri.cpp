@@ -425,6 +425,12 @@ bool ParallelJudgment(const Vector3& v1, const Vector3& v2)
  */
 int InTriangle(const Triangle& tri, const Vector3& pt)
 {
+    if (tri.m_pt[0].distance(pt) < EPSILON ||
+        tri.m_pt[1].distance(pt) < EPSILON ||
+        tri.m_pt[2].distance(pt) < EPSILON)
+    {
+        return 2;
+    }
     Vector3 ap = tri.m_pt[0] - pt;
     Vector3 apUnit = ap.normalise();
     Vector3 normal = (tri.m_pt[1]-tri.m_pt[0]).cross(tri.m_pt[2]-tri.m_pt[0]);
@@ -432,12 +438,6 @@ int InTriangle(const Triangle& tri, const Vector3& pt)
     double inPlane = std::fabs(normalUnit.dot(apUnit));
     if (inPlane > EPSION)
         return -1; // 点p不在三角形所在的平面上
-    if (tri.m_pt[0].distance(pt) < EPSILON ||
-        tri.m_pt[1].distance(pt) < EPSILON ||
-        tri.m_pt[2].distance(pt) < EPSILON )
-    {
-        return 2;
-    }
     if (ParallelJudgment(pt-tri.m_pt[0], tri.m_pt[1]-tri.m_pt[0]) ||
         ParallelJudgment(pt-tri.m_pt[1], tri.m_pt[2]-tri.m_pt[1]) ||
         ParallelJudgment(pt-tri.m_pt[2], tri.m_pt[0]-tri.m_pt[2]))
