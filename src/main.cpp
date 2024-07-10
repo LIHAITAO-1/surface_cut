@@ -9,6 +9,7 @@
 #include "pipeline/run pipeline/run_pipeline.h"
 #include "geogram/basic/common.h"
 #include "geogram/basic/command_line_args.h"
+#include "basic/typedef.h"
 
 #include <csignal>
 
@@ -63,12 +64,22 @@ int main(int argc, char **argv) {
 //
 //    tbb::task_scheduler_init scheduler(num_threads, stack_size);
 
+
     std::string Path = "D:/xmy/model/";
     //std::string MeshFile =  "cube2.obj";
     //std::string CurveFile = "curve6.obj";
     std::string MeshFile =  "8-2.obj";//"cube2.obj";
     std::string CurveFile =  "fm38.obj";//"curve6.obj";
-    surface_cut(Path, MeshFile, CurveFile);
+
+	base_type::Triangle_Soup_Mesh meshCube;
+	base_type::Triangle_Soup_Mesh meshCurve;
+	base_type::Triangle_Soup_Mesh meshResult;
+
+	meshCube.load_from_file(Path + MeshFile);
+	meshCurve.load_from_file(Path + CurveFile);
+    int index = 1;
+
+    surface_cut(Path, meshCube, meshCurve, meshResult, index);
 
     return 0;
 }

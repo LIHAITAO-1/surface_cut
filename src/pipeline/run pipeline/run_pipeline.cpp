@@ -1,18 +1,12 @@
-//
-// Created by xmyci on 27/02/2024.
-//
+
 #include "run_pipeline.h"
 #include "TriIntersectionTri.h"
-//#include "geogram/mesh/mesh_AABB.h"
 #include <vector>
 #include <list>
 #include <array>
-//#include <geogram/mesh/mesh_remesh.h>
-//#include "proxy/geogram/geogram_proxy.h"
 
 using namespace std;
 using namespace base_type;
-//using namespace Geometrical_Predicates;
 
 enum Vtx_state {
 	Inside,
@@ -20,7 +14,6 @@ enum Vtx_state {
 	OnVtx,
 	Other
 };
-
 
 enum Tri_tri_cut_case {
 	P1_P2_Inside = 1,
@@ -247,42 +240,40 @@ void AABB_intersection(BVHNode* root, base_type::Face* f_insert, vector<Face*>& 
 	AABB_intersection(root->right, f_insert, interFaceArray, interFaceDeleteArray, b);
 };
 
-
-void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) {
-	auto get_vtx_state = [](double a, double b) {
-		if ((a + b) < 1 - 1e-6 && a > 1e-6 && b > 1e-6) {
-			return Inside;
-		}
-		if ((abs(a) < 1e-6 && abs(b) < 1e-6) ||
-			(abs(abs(a) - 1) < 1e-6 && abs(b) < 1e-6) ||
-			(abs(abs(b) - 1) < 1e-6 && abs(a) < 1e-6)) {
-			return OnVtx;
-		}
-		if (abs(a) < 1e-6 || abs(b) < 1e-6 || abs((a + b) - 1) < 1e-6) {
-			return OnEdge;
-		}
-		return Other;
+Vtx_state get_vtx_state(double a, double b) {
+	if ((a + b) < 1 - 1e-6 && a > 1e-6 && b > 1e-6) {
+		return Inside;
+	}
+	if ((abs(a) < 1e-6 && abs(b) < 1e-6) ||
+		(abs(abs(a) - 1) < 1e-6 && abs(b) < 1e-6) ||
+		(abs(abs(b) - 1) < 1e-6 && abs(a) < 1e-6)) {
+		return OnVtx;
+	}
+	if (abs(a) < 1e-6 || abs(b) < 1e-6 || abs((a + b) - 1) < 1e-6) {
+		return OnEdge;
+	}
+	return Other;
 	};
 
-	auto point_uv_calulate_triangle = [](Triangle3d tri, base_type::Vector3 intersection) -> std::pair<double, double> {
-		auto u = tri.p2 - tri.p1;
-		auto v = tri.p3 - tri.p1;
-		auto Q = tri.p1;
+std::pair<double, double> point_uv_calulate_triangle(Triangle3d tri, base_type::Vector3 intersection) {
+	auto u = tri.p2 - tri.p1;
+	auto v = tri.p3 - tri.p1;
+	auto Q = tri.p1;
 
-		base_type::Vector3 cvu = cross(u, v);
+	base_type::Vector3 cvu = cross(u, v);
 
-		base_type::Vector3 planar_hitpt_vector = intersection - Q;
-		auto w = cvu / dot(cvu, cvu);
-		auto alpha = dot(w, cross(planar_hitpt_vector, v));
-		auto beta = dot(w, cross(u, planar_hitpt_vector));
+	base_type::Vector3 planar_hitpt_vector = intersection - Q;
+	auto w = cvu / dot(cvu, cvu);
+	auto alpha = dot(w, cross(planar_hitpt_vector, v));
+	auto beta = dot(w, cross(u, planar_hitpt_vector));
 
-		return { alpha, beta };
-		};
+	return { alpha, beta };
+	};
 
-	auto edge_split = [](Triangle_Soup_Mesh& mesh, base_type::Edge* e, const base_type::Vector3& p, Face*& new_f1, Face*& new_f2, vector<Face*>& interFaceArray, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray) -> std::pair<Vertex*, std::array<Edge*, 2> > {
+std::pair<Vertex*, std::array<Edge*, 2>> edge_split(Triangle_Soup_Mesh& mesh, base_type::Edge* e, const base_type::Vector3& p, Face*& new_f1, Face*& new_f2, vector<Face*>& interFaceArray, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray){
 
-		//     orig
-		//     /|\            /|\
+	//     orig
+	//     /|\            /|\
         //    / | \          / | \
         //   /f1|f2\        /  |  \
         //  /   |   \  ->  /___|___\
@@ -292,530 +283,527 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 		//     \|/            \|/
 		//     end
 
-		Vertex* new_vtx = Vertex::allocate_from_pool(&mesh.vertex_pool, p);
+	Vertex* new_vtx = Vertex::allocate_from_pool(&mesh.vertex_pool, p);
 
-		if (e->connect_face_array->size() == 2) {
-			base_type::Face* f1 = (*(e->connect_face_array))[0];
-			base_type::Face* f2 = (*(e->connect_face_array))[1];
+	if (e->connect_face_array->size() == 2) {
+		base_type::Face* f1 = (*(e->connect_face_array))[0];
+		base_type::Face* f2 = (*(e->connect_face_array))[1];
 
-			Vertex* v_orig = e->orig;
-			Vertex* v_end = e->end;
+		Vertex* v_orig = e->orig;
+		Vertex* v_end = e->end;
 
-			Vertex* v_t1 = base_type::Face::get_disjoin_face_no_share_vtx(f2, f1);
-			Vertex* v_t2 = base_type::Face::get_disjoin_face_no_share_vtx(f1, f2);
+		Vertex* v_t1 = base_type::Face::get_disjoin_face_no_share_vtx(f2, f1);
+		Vertex* v_t2 = base_type::Face::get_disjoin_face_no_share_vtx(f1, f2);
 
-			//        Edge *e_t11 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_end)];
-			Edge* e_t12 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_orig)];
+		//        Edge *e_t11 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_end)];
+		Edge* e_t12 = f1->disjoin_edge[base_type::Face::get_vtx_index(f1, v_orig)];
 
-			//        Edge *e_t21 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_end)];
-			Edge* e_t22 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_orig)];
+		//        Edge *e_t21 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_end)];
+		Edge* e_t22 = f2->disjoin_edge[base_type::Face::get_vtx_index(f2, v_orig)];
 
-			//new
-			new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
-			new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t2, v_end, new_vtx);
+		//new
+		new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
+		new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t2, v_end, new_vtx);
 
-			Edge* new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
-			Edge* new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
-			Edge* new_e2 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t2);
+		Edge* new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
+		Edge* new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
+		Edge* new_e2 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t2);
 
-			//change e
-			e->end = new_vtx;
+		//change e
+		e->end = new_vtx;
 
-			//change f1 and f2
-			Face::set_vtx(f1, new_vtx, Face::get_vtx_index(f1, v_end));
-			Face::set_vtx(f2, new_vtx, Face::get_vtx_index(f2, v_end));
+		//change f1 and f2
+		Face::set_vtx(f1, new_vtx, Face::get_vtx_index(f1, v_end));
+		Face::set_vtx(f2, new_vtx, Face::get_vtx_index(f2, v_end));
 
-			f1->disjoin_edge[Face::get_vtx_index(f1, v_orig)] = new_e1;
-			f2->disjoin_edge[Face::get_vtx_index(f2, v_orig)] = new_e2;
+		f1->disjoin_edge[Face::get_vtx_index(f1, v_orig)] = new_e1;
+		f2->disjoin_edge[Face::get_vtx_index(f2, v_orig)] = new_e2;
 
-			//change new face and edge
-			(*(new_e0->connect_face_array)).push_back(new_f1);
-			(*(new_e0->connect_face_array)).push_back(new_f2);
-			(*(new_e1->connect_face_array)).push_back(f1);
-			(*(new_e1->connect_face_array)).push_back(new_f1);
-			(*(new_e2->connect_face_array)).push_back(f2);
-			(*(new_e2->connect_face_array)).push_back(new_f2);
+		//change new face and edge
+		(*(new_e0->connect_face_array)).push_back(new_f1);
+		(*(new_e0->connect_face_array)).push_back(new_f2);
+		(*(new_e1->connect_face_array)).push_back(f1);
+		(*(new_e1->connect_face_array)).push_back(new_f1);
+		(*(new_e2->connect_face_array)).push_back(f2);
+		(*(new_e2->connect_face_array)).push_back(new_f2);
 
-			new_f1->disjoin_edge[0] = new_e0;
-			new_f2->disjoin_edge[0] = new_e0;
-			new_f1->disjoin_edge[1] = new_e1;
-			new_f2->disjoin_edge[1] = new_e2;
-			new_f1->disjoin_edge[2] = e_t12;
-			new_f2->disjoin_edge[2] = e_t22;
+		new_f1->disjoin_edge[0] = new_e0;
+		new_f2->disjoin_edge[0] = new_e0;
+		new_f1->disjoin_edge[1] = new_e1;
+		new_f2->disjoin_edge[1] = new_e2;
+		new_f1->disjoin_edge[2] = e_t12;
+		new_f2->disjoin_edge[2] = e_t22;
 
-			Edge::del_connect_face(e_t12, f1);
-			Edge::del_connect_face(e_t22, f2);
-			Edge::add_connect_face(e_t12, new_f1);
-			Edge::add_connect_face(e_t22, new_f2);
+		Edge::del_connect_face(e_t12, f1);
+		Edge::del_connect_face(e_t22, f2);
+		Edge::add_connect_face(e_t12, new_f1);
+		Edge::add_connect_face(e_t22, new_f2);
 
-			interFaceAddArray.push_back(new_f1);
-			interFaceAddArray.push_back(new_f2);
-			interFaceArray.push_back(new_f1);
-			interFaceArray.push_back(new_f2);
+		interFaceAddArray.push_back(new_f1);
+		interFaceAddArray.push_back(new_f2);
+		interFaceArray.push_back(new_f1);
+		interFaceArray.push_back(new_f2);
 
-			std::array<Edge*, 2> new_edge({ new_e0, e });
+		std::array<Edge*, 2> new_edge({ new_e0, e });
 
-			return { new_vtx, new_edge };
+		return { new_vtx, new_edge };
+	}
+	if (e->connect_face_array->size() == 1) {
+		base_type::Face* f1 = (*(e->connect_face_array))[0];
+
+		Vertex* v_orig = e->orig;
+		Vertex* v_end = e->end;
+		Vertex* v_t1 = nullptr;
+
+		if (f1->p1 != v_orig && f1->p1 != v_end) {
+			v_t1 = f1->p1;
 		}
-		if (e->connect_face_array->size() == 1) {
-			base_type::Face* f1 = (*(e->connect_face_array))[0];
-
-			Vertex* v_orig = e->orig;
-			Vertex* v_end = e->end;
-			Vertex* v_t1 = nullptr;
-
-			if (f1->p1 != v_orig && f1->p1 != v_end) {
-				v_t1 = f1->p1;
-			}
-			if (f1->p2 != v_orig && f1->p2 != v_end) {
-				v_t1 = f1->p2;
-			}
-			if (f1->p3 != v_orig && f1->p3 != v_end) {
-				v_t1 = f1->p3;
-			}
-
-			//new
-			new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_orig, new_vtx);
-			new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
-
-			Edge* new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_orig);
-			Edge* new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
-			Edge* new_e2 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
-
-			(*(new_e0->connect_face_array)).push_back(new_f1);
-			(*(new_e1->connect_face_array)).push_back(new_f2);
-			(*(new_e2->connect_face_array)).push_back(new_f1);
-			(*(new_e2->connect_face_array)).push_back(new_f2);
-
-			Edge* edge1 = Face::get_edge_from_two_vertex(f1, v_orig, v_t1);//f1->disjoin_edge[Face::get_vtx_index(f1, v_end)];
-			Edge* edge2 = Face::get_edge_from_two_vertex(f1, v_end, v_t1);//f1->disjoin_edge[Face::get_vtx_index(f1, v_orig)];
-
-			new_f1->disjoin_edge[0] = new_e0;
-			new_f1->disjoin_edge[1] = new_e2;
-			new_f1->disjoin_edge[2] = edge1;
-
-			new_f2->disjoin_edge[0] = new_e1;
-			new_f2->disjoin_edge[1] = new_e2;
-			new_f2->disjoin_edge[2] = edge2;
-
-			Edge::del_connect_face(edge1, f1);
-			Edge::del_connect_face(edge2, f1);
-			Edge::add_connect_face(edge1, new_f1);
-			Edge::add_connect_face(edge2, new_f2);
-
-			//            new_f1->mark = true;
-			//            new_f2->mark = true;
-
-			interFaceAddArray.push_back(new_f1);
-			interFaceAddArray.push_back(new_f2);
-			interFaceArray.push_back(new_f1);
-			interFaceArray.push_back(new_f2);
-			interFaceDeleteArray.push_back(f1);
-
-			interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f1), interFaceArray.end());
-
-			//delete
-			mesh.face_pool.deallocate(f1);
-			mesh.edge_pool.deallocate(e);
-
-
-
-			std::array<Edge*, 2> new_edge({ new_e2, e });
-
-			return { new_vtx, new_edge };
+		if (f1->p2 != v_orig && f1->p2 != v_end) {
+			v_t1 = f1->p2;
 		}
-		if (e->connect_face_array->size() == 0) {
-			assert(false);
+		if (f1->p3 != v_orig && f1->p3 != v_end) {
+			v_t1 = f1->p3;
 		}
-		std::pair<Vertex*, std::array<Edge*, 2>> result_error(nullptr, {});
-		return result_error;
+
+		//new
+		new_f1 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_orig, new_vtx);
+		new_f2 = Face::allocate_from_pool(&mesh.face_pool, v_t1, v_end, new_vtx);
+
+		Edge* new_e0 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_orig);
+		Edge* new_e1 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_end);
+		Edge* new_e2 = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, v_t1);
+
+		(*(new_e0->connect_face_array)).push_back(new_f1);
+		(*(new_e1->connect_face_array)).push_back(new_f2);
+		(*(new_e2->connect_face_array)).push_back(new_f1);
+		(*(new_e2->connect_face_array)).push_back(new_f2);
+
+		Edge* edge1 = Face::get_edge_from_two_vertex(f1, v_orig, v_t1);//f1->disjoin_edge[Face::get_vtx_index(f1, v_end)];
+		Edge* edge2 = Face::get_edge_from_two_vertex(f1, v_end, v_t1);//f1->disjoin_edge[Face::get_vtx_index(f1, v_orig)];
+
+		new_f1->disjoin_edge[0] = new_e0;
+		new_f1->disjoin_edge[1] = new_e2;
+		new_f1->disjoin_edge[2] = edge1;
+
+		new_f2->disjoin_edge[0] = new_e1;
+		new_f2->disjoin_edge[1] = new_e2;
+		new_f2->disjoin_edge[2] = edge2;
+
+		Edge::del_connect_face(edge1, f1);
+		Edge::del_connect_face(edge2, f1);
+		Edge::add_connect_face(edge1, new_f1);
+		Edge::add_connect_face(edge2, new_f2);
+
+		//            new_f1->mark = true;
+		//            new_f2->mark = true;
+
+		interFaceAddArray.push_back(new_f1);
+		interFaceAddArray.push_back(new_f2);
+		interFaceArray.push_back(new_f1);
+		interFaceArray.push_back(new_f2);
+		interFaceDeleteArray.push_back(f1);
+
+		interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f1), interFaceArray.end());
+
+		//delete
+		mesh.face_pool.deallocate(f1);
+		mesh.edge_pool.deallocate(e);
+
+
+
+		std::array<Edge*, 2> new_edge({ new_e2, e });
+
+		return { new_vtx, new_edge };
+	}
+	if (e->connect_face_array->size() == 0) {
+		assert(false);
+	}
+	std::pair<Vertex*, std::array<Edge*, 2>> result_error(nullptr, {});
+	return result_error;
 	};
 
-	auto tri_split = [get_vtx_state, point_uv_calulate_triangle, &edge_split](Triangle_Soup_Mesh& mesh, base_type::Face* f, base_type::Vector3& p, Face*& f1_new, Face*& f2_new, Face*& f3_new, Vertex*& new_vtx, vector<Face*>& interFaceArray, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray) {
-		double alpha, beta;
-		Face* f11;
-		Face* f22;
+void tri_split(Triangle_Soup_Mesh& mesh, base_type::Face* f, base_type::Vector3& p, Face*& f1_new, Face*& f2_new, Face*& f3_new, Vertex*& new_vtx, vector<Face*>& interFaceArray, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray) {
+	double alpha, beta;
+	Face* f11;
+	Face* f22;
 
-		std::tie(alpha, beta) = point_uv_calulate_triangle({ f->p1->position, f->p2->position, f->p3->position }, p);
-		Vtx_state vtx_state = get_vtx_state(alpha, beta);
+	std::tie(alpha, beta) = point_uv_calulate_triangle({ f->p1->position, f->p2->position, f->p3->position }, p);
+	Vtx_state vtx_state = get_vtx_state(alpha, beta);
 
-		if (vtx_state == OnEdge) {
+	if (vtx_state == OnEdge) {
+		std::array<Edge*, 2> new_e1;
+		Edge* e = abs(1 - alpha - beta) < 1e-6 ? f->disjoin_edge[0] : (abs(alpha) < 1e-6 ? f->disjoin_edge[1] : f->disjoin_edge[2]);
+		std::tie(new_vtx, new_e1) = edge_split(mesh, e, p, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+	}
+	else if (vtx_state == Inside) {
+
+		Vertex* p1 = f->p1;
+		Vertex* p2 = f->p2;
+		Vertex* p3 = f->p3;
+
+		Edge* e1 = f->disjoin_edge[0];
+		Edge* e2 = f->disjoin_edge[1];
+		Edge* e3 = f->disjoin_edge[2];
+
+		//creat
+		new_vtx = Vertex::allocate_from_pool(&mesh.vertex_pool, p);
+
+		f1_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p2, p3);
+		f2_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p3, p1);
+		f3_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p1, p2);
+
+		Edge* e1_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p1);
+		Edge* e2_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p2);
+		Edge* e3_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p3);
+
+		//change
+		Edge::del_connect_face(e1, f);
+		Edge::del_connect_face(e2, f);
+		Edge::del_connect_face(e3, f);
+
+		Edge::add_connect_face(e1, f1_new);
+		Edge::add_connect_face(e2, f2_new);
+		Edge::add_connect_face(e3, f3_new);
+
+		Edge::add_connect_face(e1_new, f2_new);
+		Edge::add_connect_face(e1_new, f3_new);
+
+		Edge::add_connect_face(e2_new, f3_new);
+		Edge::add_connect_face(e2_new, f1_new);
+
+		Edge::add_connect_face(e3_new, f1_new);
+		Edge::add_connect_face(e3_new, f2_new);
+
+		f1_new->disjoin_edge[0] = e1;
+		f1_new->disjoin_edge[1] = e3_new;
+		f1_new->disjoin_edge[2] = e2_new;
+
+		f2_new->disjoin_edge[0] = e2;
+		f2_new->disjoin_edge[1] = e1_new;
+		f2_new->disjoin_edge[2] = e3_new;
+
+		f3_new->disjoin_edge[0] = e3;
+		f3_new->disjoin_edge[1] = e2_new;
+		f3_new->disjoin_edge[2] = e1_new;
+
+		f1_new->mark = true;
+		f2_new->mark = true;
+		f3_new->mark = true;
+
+		//delete
+
+		interFaceAddArray.push_back(f1_new);
+		interFaceAddArray.push_back(f2_new);
+		interFaceAddArray.push_back(f3_new);
+		interFaceArray.push_back(f1_new);
+		interFaceArray.push_back(f2_new);
+		interFaceArray.push_back(f3_new);
+		interFaceDeleteArray.push_back(f);
+
+		interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f), interFaceArray.end());
+
+		mesh.face_pool.deallocate(f);
+	}
+	else {
+		assert(false);
+	}
+	};
+
+void clear_all_tri_mark(Triangle_Soup_Mesh& mesh) {
+	for (int i = 0; i < mesh.face_pool.size(); i++) {
+		base_type::Face* f_mesh = (base_type::Face*)mesh.face_pool[i];
+		f_mesh->mark = false;
+	}
+	};
+
+void tri_mark(std::vector<Face*>& f_array) {
+	for (auto f : f_array) {
+		f->mark = true;
+	}
+	};
+
+Cut_result get_cut_result(base_type::Face* f_insert, const base_type::Vector3& p1, const base_type::Vector3& p2){
+
+	double alpha_p1, beta_p1;
+	double alpha_p2, beta_p2;
+	std::tie(alpha_p1, beta_p1) = point_uv_calulate_triangle({ f_insert->p1->position, f_insert->p2->position, f_insert->p3->position }, p1);
+	std::tie(alpha_p2, beta_p2) = point_uv_calulate_triangle({ f_insert->p1->position, f_insert->p2->position, f_insert->p3->position }, p2);
+
+	Cut_result cut_result;
+
+	Vtx_state p1_state = get_vtx_state(alpha_p1, beta_p1);
+	Vtx_state p2_state = get_vtx_state(alpha_p2, beta_p2);
+
+	// case 1 p1 and p2 inside f_mesh , split f_mesh
+	if (p1_state == Inside && p2_state == Inside) {
+		cut_result.cut_case = P1_P2_Inside;
+	}
+	else if (p1_state == Inside && p2_state == OnEdge) {
+		cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+		cut_result.cut_case = P1_Inside_P2_OnEdge;
+	}
+	else if (p1_state == OnEdge && p2_state == Inside) {
+		cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+		cut_result.cut_case = P1_OnEdge_P2_Inside;
+	}
+	else if (p1_state == OnEdge && p2_state == OnEdge) {
+		cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+		cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+		cut_result.cut_case = P1_P2_OnEdge;
+	}
+	else if (p1_state == OnVtx && p2_state == Inside) {
+		cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
+		cut_result.cut_case = P1_OnVtx_P2_Inside;
+	}
+	else if (p1_state == Inside && p2_state == OnVtx) {
+		cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
+		cut_result.cut_case = P1_Inside_P2_OnVtx;
+	}
+	else if (p1_state == OnVtx && p2_state == OnEdge) {
+		cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+		cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
+		cut_result.cut_case = P1_OnVtx_P2_OnEdge;
+	}
+	else if (p1_state == OnEdge && p2_state == OnVtx) {
+		cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
+		cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
+		cut_result.cut_case = P1_OnEdge_P2_OnVtx;
+	}
+	else if (p1_state == OnVtx && p2_state == OnVtx) {
+		cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
+		cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
+		cut_result.cut_case = P1_P2_OnVtx;
+	}
+	else {
+		assert(false);
+	}
+	return cut_result;
+	};
+
+void insert_one_tri(Triangle_Soup_Mesh& mesh, vector<Face*>& interFaceArray, base_type::Face* f_insert, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray) {
+
+	clear_all_tri_mark(mesh);
+
+insert_start:
+	for (int i = 0; i < interFaceArray.size(); i++) {
+
+		base_type::Face* f_mesh = (base_type::Face*)interFaceArray[i];
+		if (f_mesh->mark == true) {
+			//interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f_mesh), interFaceArray.end());
+			continue;
+		}
+		else {
+			f_mesh->mark = true;
+		}
+
+		base_type::Vector3 p1;
+		base_type::Vector3 p2;
+		if (!tri_tri_cut(f_mesh, f_insert, p1, p2)) {
+			continue;
+		}
+
+		auto c_r = get_cut_result(f_mesh, p1, p2);
+
+		switch (c_r.cut_case) {
+		case P1_P2_Inside: {
+			Vertex* new_v1 = nullptr;
+			Vertex* new_v2 = nullptr;
+			Face* f1, * f2, * f3;
+			Face* f11, * f22, * f33;
+
+			tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+			Triangle tri = Triangle(f1->p1->position, f1->p2->position, f1->p3->position);
+			bool flag = true;
+			if (InTriangle(tri, p2) != -1 && flag) {
+				tri_split(mesh, f1, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+				flag = false;
+			}
+			tri = Triangle(f2->p1->position, f2->p2->position, f2->p3->position);
+			if (InTriangle(tri, p2) != -1 && flag) {
+				tri_split(mesh, f2, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+				flag = false;
+			}
+			tri = Triangle(f3->p1->position, f3->p2->position, f3->p3->position);
+			if (InTriangle(tri, p2) != -1 && flag) {
+				tri_split(mesh, f3, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+				flag = false;
+			}
+
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
+			edge_find->special = true;
+			//tri_mark(*(edge_find->connect_face_array));
+
+			new_v1->special = true;
+			new_v2->special = true;
+			break;
+		}
+		case P1_Inside_P2_OnEdge: {
+			Vertex* new_v1 = nullptr;
+			Vertex* new_v2 = nullptr;
+			Face* f1, * f2, * f3;
+			Face* f11, * f22;
 			std::array<Edge*, 2> new_e1;
-			Edge* e = abs(1 - alpha - beta) < 1e-6 ? f->disjoin_edge[0] : (abs(alpha) < 1e-6 ? f->disjoin_edge[1] : f->disjoin_edge[2]);
-			std::tie(new_vtx, new_e1) = edge_split(mesh, e, p, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+			tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+			std::tie(new_v2, new_e1) = edge_split(mesh, c_r.c_e[0], p2, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
+			edge_find->special = true;
+			tri_mark(*(edge_find->connect_face_array));
+			new_v1->special = true;
+			new_v2->special = true;
+			break;
 		}
-		else if (vtx_state == Inside) {
+		case P1_OnEdge_P2_Inside: {
+			Vertex* new_v1 = nullptr;
+			Vertex* new_v2 = nullptr;
+			Face* f1, * f2, * f3;
+			Face* f11, * f22;
+			std::array<Edge*, 2> new_e1;
 
-			Vertex* p1 = f->p1;
-			Vertex* p2 = f->p2;
-			Vertex* p3 = f->p3;
+			tri_split(mesh, f_mesh, p2, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
 
-			Edge* e1 = f->disjoin_edge[0];
-			Edge* e2 = f->disjoin_edge[1];
-			Edge* e3 = f->disjoin_edge[2];
+			std::tie(new_v2, new_e1) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
 
-			//creat
-			new_vtx = Vertex::allocate_from_pool(&mesh.vertex_pool, p);
-
-			f1_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p2, p3);
-			f2_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p3, p1);
-			f3_new = Face::allocate_from_pool(&mesh.face_pool, new_vtx, p1, p2);
-
-			Edge* e1_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p1);
-			Edge* e2_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p2);
-			Edge* e3_new = Edge::allocate_from_pool(&mesh.edge_pool, new_vtx, p3);
-
-			//change
-			Edge::del_connect_face(e1, f);
-			Edge::del_connect_face(e2, f);
-			Edge::del_connect_face(e3, f);
-
-			Edge::add_connect_face(e1, f1_new);
-			Edge::add_connect_face(e2, f2_new);
-			Edge::add_connect_face(e3, f3_new);
-
-			Edge::add_connect_face(e1_new, f2_new);
-			Edge::add_connect_face(e1_new, f3_new);
-
-			Edge::add_connect_face(e2_new, f3_new);
-			Edge::add_connect_face(e2_new, f1_new);
-
-			Edge::add_connect_face(e3_new, f1_new);
-			Edge::add_connect_face(e3_new, f2_new);
-
-			f1_new->disjoin_edge[0] = e1;
-			f1_new->disjoin_edge[1] = e3_new;
-			f1_new->disjoin_edge[2] = e2_new;
-
-			f2_new->disjoin_edge[0] = e2;
-			f2_new->disjoin_edge[1] = e1_new;
-			f2_new->disjoin_edge[2] = e3_new;
-
-			f3_new->disjoin_edge[0] = e3;
-			f3_new->disjoin_edge[1] = e2_new;
-			f3_new->disjoin_edge[2] = e1_new;
-
-			f1_new->mark = true;
-			f2_new->mark = true;
-			f3_new->mark = true;
-
-			//delete
-
-			interFaceAddArray.push_back(f1_new);
-			interFaceAddArray.push_back(f2_new);
-			interFaceAddArray.push_back(f3_new);
-			interFaceArray.push_back(f1_new);
-			interFaceArray.push_back(f2_new);
-			interFaceArray.push_back(f3_new);
-			interFaceDeleteArray.push_back(f);
-
-			interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f), interFaceArray.end());
-
-			mesh.face_pool.deallocate(f);
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
+			edge_find->special = true;
+			tri_mark(*(edge_find->connect_face_array));
+			new_v1->special = true;
+			new_v2->special = true;
+			break;
 		}
-		else {
+
+		case P1_P2_OnEdge: {
+			Vertex* new_v1 = nullptr;
+			Vertex* new_v2 = nullptr;
+			std::array<Edge*, 2> new_e1, new_e2;
+			Face* f11, * f22, * f33, * f44;
+
+			std::tie(new_v1, new_e1) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+			std::tie(new_v2, new_e2) = edge_split(mesh, c_r.c_e[1], p2, f33, f44, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
+			edge_find->special = true;
+			tri_mark(*(edge_find->connect_face_array));
+			new_v1->special = true;
+			new_v2->special = true;
+			break;
+		}
+
+		case P1_OnVtx_P2_Inside: {
+			Vertex* new_v1 = nullptr;
+			Vertex* new_v2 = nullptr;
+			Face* f1, * f2, * f3;
+
+			if (p1.distance(f_mesh->p1->position) < 1e-6) {
+				new_v1 = f_mesh->p1;
+			}
+			if (p1.distance(f_mesh->p2->position) < 1e-6) {
+				new_v1 = f_mesh->p2;
+			}
+			if (p1.distance(f_mesh->p3->position) < 1e-6) {
+				new_v1 = f_mesh->p3;
+			}
+
+			tri_split(mesh, f_mesh, p2, f1, f2, f3, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
+			edge_find->special = true;
+			//                    tri_mark(*(edge_find->connect_face_array));
+			new_v1->special = true;
+			new_v2->special = true;
+			break;
+		}
+		case P1_Inside_P2_OnVtx: {
+			Vertex* new_v1 = nullptr;
+			Vertex* new_v2 = nullptr;
+			Face* f1, * f2, * f3;
+
+			if (p2.distance(f_mesh->p1->position) < 1e-6) {
+				new_v2 = f_mesh->p1;
+			}
+			if (p2.distance(f_mesh->p2->position) < 1e-6) {
+				new_v2 = f_mesh->p2;
+			}
+			if (p2.distance(f_mesh->p3->position) < 1e-6) {
+				new_v2 = f_mesh->p3;
+			}
+
+			tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
+			edge_find->special = true;
+			//                    tri_mark(*(edge_find->connect_face_array));
+			new_v1->special = true;
+			new_v2->special = true;
+			break;
+		}
+
+		case P1_OnVtx_P2_OnEdge: {
+			Vertex* new_v = nullptr;
+			std::array<Edge*, 2> new_e;
+			Face* f11, * f22;
+			std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[1], p2, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[0]);
+			edge_find->special = true;
+			tri_mark(*(edge_find->connect_face_array));
+			new_v->special = true;
+			break;
+		}
+		case P1_OnEdge_P2_OnVtx: {
+			Vertex* new_v;
+			std::array<Edge*, 2> new_e;
+			Face* f11, * f22;
+			std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
+
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[1]);
+			edge_find->special = true;
+			tri_mark(*(edge_find->connect_face_array));
+			edge_find->special = true;
+			new_v->special = true;
+			break;
+		}
+
+		case P1_P2_OnVtx: {
+			Vertex* new_v1 = nullptr;
+			Vertex* new_v2 = nullptr;
+			new_v1 = c_r.c_v[0];
+			new_v2 = c_r.c_v[1];
+			auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
+			tri_mark(*(edge_find->connect_face_array));
+			edge_find->special = true;
+
+			new_v1->special = true;
+			new_v2->special = true;
+			break;
+		}
+
+		case No_Cut: {
+			break;
+		}
+		default:
 			assert(false);
 		}
-		};
 
-	auto clear_all_tri_mark = [](Triangle_Soup_Mesh& mesh) {
-		for (int i = 0; i < mesh.face_pool.size(); i++) {
-			base_type::Face* f_mesh = (base_type::Face*)mesh.face_pool[i];
-			f_mesh->mark = false;
-		}
-		};
-
-	auto tri_mark = [](std::vector<Face*>& f_array) {
-		for (auto f : f_array) {
-			f->mark = true;
-		}
-		};
-
-	auto get_cut_result = [point_uv_calulate_triangle, get_vtx_state](base_type::Face* f_insert, const base_type::Vector3& p1, const base_type::Vector3& p2) -> Cut_result {
-
-		double alpha_p1, beta_p1;
-		double alpha_p2, beta_p2;
-		std::tie(alpha_p1, beta_p1) = point_uv_calulate_triangle({ f_insert->p1->position, f_insert->p2->position, f_insert->p3->position }, p1);
-		std::tie(alpha_p2, beta_p2) = point_uv_calulate_triangle({ f_insert->p1->position, f_insert->p2->position, f_insert->p3->position }, p2);
-
-		Cut_result cut_result;
-
-		Vtx_state p1_state = get_vtx_state(alpha_p1, beta_p1);
-		Vtx_state p2_state = get_vtx_state(alpha_p2, beta_p2);
-
-		// case 1 p1 and p2 inside f_mesh , split f_mesh
-		if (p1_state == Inside && p2_state == Inside) {
-			cut_result.cut_case = P1_P2_Inside;
-		}
-		else if (p1_state == Inside && p2_state == OnEdge) {
-			cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
-			cut_result.cut_case = P1_Inside_P2_OnEdge;
-		}
-		else if (p1_state == OnEdge && p2_state == Inside) {
-			cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
-			cut_result.cut_case = P1_OnEdge_P2_Inside;
-		}
-		else if (p1_state == OnEdge && p2_state == OnEdge) {
-			cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
-			cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
-			cut_result.cut_case = P1_P2_OnEdge;
-		}
-		else if (p1_state == OnVtx && p2_state == Inside) {
-			cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
-			cut_result.cut_case = P1_OnVtx_P2_Inside;
-		}
-		else if (p1_state == Inside && p2_state == OnVtx) {
-			cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
-			cut_result.cut_case = P1_Inside_P2_OnVtx;
-		}
-		else if (p1_state == OnVtx && p2_state == OnEdge) {
-			cut_result.c_e[1] = abs(1 - alpha_p2 - beta_p2) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p2) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
-			cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
-			cut_result.cut_case = P1_OnVtx_P2_OnEdge;
-		}
-		else if (p1_state == OnEdge && p2_state == OnVtx) {
-			cut_result.c_e[0] = abs(1 - alpha_p1 - beta_p1) < 1e-6 ? f_insert->disjoin_edge[0] : (abs(alpha_p1) < 1e-6 ? f_insert->disjoin_edge[1] : f_insert->disjoin_edge[2]);
-			cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
-			cut_result.cut_case = P1_OnEdge_P2_OnVtx;
-		}
-		else if (p1_state == OnVtx && p2_state == OnVtx) {
-			cut_result.c_v[0] = abs(alpha_p1 + beta_p1) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p1) < 1e-6 ? f_insert->p3 : f_insert->p2);
-			cut_result.c_v[1] = abs(alpha_p2 + beta_p2) < 1e-6 ? f_insert->p1 : (abs(1 - beta_p2) < 1e-6 ? f_insert->p3 : f_insert->p2);
-			cut_result.cut_case = P1_P2_OnVtx;
-		}
-		else {
-			assert(false);
-		}
-		return cut_result;
-		};
-
-	auto insert_one_tri = [&](Triangle_Soup_Mesh& mesh, vector<Face*>& interFaceArray, base_type::Face* f_insert, vector<Face*>& interFaceDeleteArray, vector<Face*>& interFaceAddArray) {
-
-		clear_all_tri_mark(mesh);
-
-	insert_start:
-		for (int i = 0; i < interFaceArray.size(); i++) {
-
-			base_type::Face* f_mesh = (base_type::Face*)interFaceArray[i];
-			if (f_mesh->mark == true) {
-				//interFaceArray.erase(std::remove(interFaceArray.begin(), interFaceArray.end(), f_mesh), interFaceArray.end());
-				continue;
-			}
-			else {
-				f_mesh->mark = true;
-			}
-
-			base_type::Vector3 p1;
-			base_type::Vector3 p2;
-			if (!tri_tri_cut(f_mesh, f_insert, p1, p2)) {
-				continue;
-			}
-
-			auto c_r = get_cut_result(f_mesh, p1, p2);
-
-			switch (c_r.cut_case) {
-			case P1_P2_Inside: {
-				Vertex* new_v1 = nullptr;
-				Vertex* new_v2 = nullptr;
-				Face* f1, * f2, * f3;
-				Face* f11, * f22, * f33;
-
-				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				Triangle tri = Triangle(f1->p1->position, f1->p2->position, f1->p3->position);
-				bool flag = true;
-				if (InTriangle(tri, p2) != -1 && flag) {
-					tri_split(mesh, f1, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-					flag = false;
-				}
-				tri = Triangle(f2->p1->position, f2->p2->position, f2->p3->position);
-				if (InTriangle(tri, p2) != -1 && flag) {
-					tri_split(mesh, f2, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-					flag = false;
-				}
-				tri = Triangle(f3->p1->position, f3->p2->position, f3->p3->position);
-				if (InTriangle(tri, p2) != -1 && flag) {
-					tri_split(mesh, f3, p2, f11, f22, f33, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-					flag = false;
-				}
-
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
-				edge_find->special = true;
-				//tri_mark(*(edge_find->connect_face_array));
-
-				new_v1->special = true;
-				new_v2->special = true;
-				break;
-			}
-			case P1_Inside_P2_OnEdge: {
-				Vertex* new_v1 = nullptr;
-				Vertex* new_v2 = nullptr;
-				Face* f1, * f2, * f3;
-				Face* f11, * f22;
-				std::array<Edge*, 2> new_e1;
-
-				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				std::tie(new_v2, new_e1) = edge_split(mesh, c_r.c_e[0], p2, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
-				edge_find->special = true;
-				tri_mark(*(edge_find->connect_face_array));
-				new_v1->special = true;
-				new_v2->special = true;
-				break;
-			}
-			case P1_OnEdge_P2_Inside: {
-				Vertex* new_v1 = nullptr;
-				Vertex* new_v2 = nullptr;
-				Face* f1, * f2, * f3;
-				Face* f11, * f22;
-				std::array<Edge*, 2> new_e1;
-
-				tri_split(mesh, f_mesh, p2, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				std::tie(new_v2, new_e1) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
-				edge_find->special = true;
-				tri_mark(*(edge_find->connect_face_array));
-				new_v1->special = true;
-				new_v2->special = true;
-				break;
-			}
-
-			case P1_P2_OnEdge: {
-				Vertex* new_v1 = nullptr;
-				Vertex* new_v2 = nullptr;
-				std::array<Edge*, 2> new_e1, new_e2;
-				Face* f11, * f22, * f33, * f44;
-
-				std::tie(new_v1, new_e1) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-				std::tie(new_v2, new_e2) = edge_split(mesh, c_r.c_e[1], p2, f33, f44, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
-				edge_find->special = true;
-				tri_mark(*(edge_find->connect_face_array));
-				new_v1->special = true;
-				new_v2->special = true;
-				break;
-			}
-
-			case P1_OnVtx_P2_Inside: {
-				Vertex* new_v1 = nullptr;
-				Vertex* new_v2 = nullptr;
-				Face* f1, * f2, * f3;
-
-				if (p1.distance(f_mesh->p1->position) < 1e-6) {
-					new_v1 = f_mesh->p1;
-				}
-				if (p1.distance(f_mesh->p2->position) < 1e-6) {
-					new_v1 = f_mesh->p2;
-				}
-				if (p1.distance(f_mesh->p3->position) < 1e-6) {
-					new_v1 = f_mesh->p3;
-				}
-
-				tri_split(mesh, f_mesh, p2, f1, f2, f3, new_v2, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
-				edge_find->special = true;
-				//                    tri_mark(*(edge_find->connect_face_array));
-				new_v1->special = true;
-				new_v2->special = true;
-				break;
-			}
-			case P1_Inside_P2_OnVtx: {
-				Vertex* new_v1 = nullptr;
-				Vertex* new_v2 = nullptr;
-				Face* f1, * f2, * f3;
-
-				if (p2.distance(f_mesh->p1->position) < 1e-6) {
-					new_v2 = f_mesh->p1;
-				}
-				if (p2.distance(f_mesh->p2->position) < 1e-6) {
-					new_v2 = f_mesh->p2;
-				}
-				if (p2.distance(f_mesh->p3->position) < 1e-6) {
-					new_v2 = f_mesh->p3;
-				}
-
-				tri_split(mesh, f_mesh, p1, f1, f2, f3, new_v1, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
-				edge_find->special = true;
-				//                    tri_mark(*(edge_find->connect_face_array));
-				new_v1->special = true;
-				new_v2->special = true;
-				break;
-			}
-
-			case P1_OnVtx_P2_OnEdge: {
-				Vertex* new_v = nullptr;
-				std::array<Edge*, 2> new_e;
-				Face* f11, * f22;
-				std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[1], p2, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[0]);
-				edge_find->special = true;
-				tri_mark(*(edge_find->connect_face_array));
-				new_v->special = true;
-				break;
-			}
-			case P1_OnEdge_P2_OnVtx: {
-				Vertex* new_v;
-				std::array<Edge*, 2> new_e;
-				Face* f11, * f22;
-				std::tie(new_v, new_e) = edge_split(mesh, c_r.c_e[0], p1, f11, f22, interFaceArray, interFaceDeleteArray, interFaceAddArray);
-
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v, c_r.c_v[1]);
-				edge_find->special = true;
-				tri_mark(*(edge_find->connect_face_array));
-				edge_find->special = true;
-				new_v->special = true;
-				break;
-			}
-
-			case P1_P2_OnVtx: {
-				Vertex* new_v1 = nullptr;
-				Vertex* new_v2 = nullptr;
-				new_v1 = c_r.c_v[0];
-				new_v2 = c_r.c_v[1];
-				auto edge_find = Edge::find_edge(&mesh.edge_pool, new_v1, new_v2);
-				tri_mark(*(edge_find->connect_face_array));
-				edge_find->special = true;
-
-				new_v1->special = true;
-				new_v2->special = true;
-				break;
-			}
-
-			case No_Cut: {
-				break;
-			}
-			default:
-				assert(false);
-			}
-
-			goto insert_start;
-		}
+		goto insert_start;
+	}
 	};
 
-	logger().info("Step 1: Compute Point");
+void surface_cut(std::string Path, base_type::Triangle_Soup_Mesh& meshCube, base_type::Triangle_Soup_Mesh& meshCurve, base_type::Triangle_Soup_Mesh& meshResult, int index) {
 
-	Triangle_Soup_Mesh meshCube;
+	logger().info("Compute Start");
+
 	Triangle_Soup_Mesh meshCube2;
-	Triangle_Soup_Mesh meshCurve;
 	Triangle_Soup_Mesh meshCurve2;
 
-	meshCube.load_from_file(Path + MeshFile);
-	//meshCube2.load_from_file(Path + MeshFile);
 	meshCube2.copy(meshCube);
-	meshCurve.load_from_file(Path + CurveFile);
 
 	//step 1: use meshCurve to subdivide meshCube
 
@@ -850,7 +838,7 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 		}
 	}
 
-	meshCube.save(Path, "output");
+	meshCube.save(Path, "outputCube");
 
 	std::vector<Object*> objects_meshCurve;
 	for (int i = 0; i < meshCurve.face_pool.size(); i++) {
@@ -935,7 +923,7 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
 			Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
 		}
-		if (part_index == 1) {
+		if (part_index == index) {
 			meshCurve2.copy_no_edge(part);
 		}
 		part.save(Path, "output_Curve" + std::to_string(part_index++));
@@ -988,6 +976,7 @@ void surface_cut(std::string Path, std::string MeshFile, std::string CurveFile) 
 			auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
 			Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
 		}
+		meshResult.copy(part);
 		part.save(Path, "output_Cube" + std::to_string(part_index++));
 	} while (unmarked_face);
 
