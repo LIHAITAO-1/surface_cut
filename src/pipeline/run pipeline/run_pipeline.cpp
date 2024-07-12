@@ -701,13 +701,13 @@ insert_start:
 			Vertex* new_v2 = nullptr;
 			Face* f1, * f2, * f3;
 
-			if (p1.distance(f_mesh->p1->position) < 1e-6) {
+			if (p1.distance(f_mesh->p1->position) < 1e-5) {
 				new_v1 = f_mesh->p1;
 			}
-			if (p1.distance(f_mesh->p2->position) < 1e-6) {
+			if (p1.distance(f_mesh->p2->position) < 1e-5) {
 				new_v1 = f_mesh->p2;
 			}
-			if (p1.distance(f_mesh->p3->position) < 1e-6) {
+			if (p1.distance(f_mesh->p3->position) < 1e-5) {
 				new_v1 = f_mesh->p3;
 			}
 
@@ -796,34 +796,33 @@ insert_start:
 	}
 	};
 
-void surface_cut(std::string Path, base_type::Triangle_Soup_Mesh& meshCube, base_type::Triangle_Soup_Mesh& meshCurve, base_type::Triangle_Soup_Mesh& meshResult, int index) {
+base_type::Face* get_unmarked_face(Triangle_Soup_Mesh& mesh) {
+	for (int i = 0; i < mesh.face_pool.size(); i++) {
+		base_type::Face* f = (base_type::Face*)mesh.face_pool[i];
+		if (f->mark == false)
+			return f;
+	}
+	return nullptr;
+};
 
-	logger().info("Compute Start");
-
-	Triangle_Soup_Mesh meshCube2;
-	Triangle_Soup_Mesh meshCurve2;
-
-	meshCube2.copy(meshCube);
-
-	//step 1: use meshCurve to subdivide meshCube
-
-	std::vector<Object*> objects_meshCube;
-	for (int i = 0; i < meshCube.face_pool.size(); i++) {
-		auto f = (base_type::Face*)meshCube.face_pool[i];
+void mesh2_Cut_mesh1(base_type::Triangle_Soup_Mesh& mesh1, base_type::Triangle_Soup_Mesh& mesh2) {
+	std::vector<Object*> objects_mesh1;
+	for (int i = 0; i < mesh1.face_pool.size(); i++) {
+		auto f = (base_type::Face*)mesh1.face_pool[i];
 		Object* obj = new Object{ computeAABB(*f), f };
-		objects_meshCube.push_back(obj);
+		objects_mesh1.push_back(obj);
 	}
 
-	BVHNode* root_meshCube = buildBVH(objects_meshCube);
-	
+	BVHNode* root_mesh1 = buildBVH(objects_mesh1);
+
 	vector<Face*> interFaceDeleteArray;
 	vector<Face*> interFaceAddArray;
 
-	for (int i = 0; i < meshCurve.face_pool.size(); i++) {
-		auto f = (base_type::Face*)meshCurve.face_pool[i];
+	for (int i = 0; i < mesh2.face_pool.size(); i++) {
+		auto f = (base_type::Face*)mesh2.face_pool[i];
 		vector<Face*> interFaceArray;
 		bool DeleteFlag = false;
-		AABB_intersection(root_meshCube, f, interFaceArray, interFaceDeleteArray, DeleteFlag);
+		AABB_intersection(root_mesh1, f, interFaceArray, interFaceDeleteArray, DeleteFlag);
 		//if (interFaceArray.size() == 0 && !DeleteFlag) {
 		//	continue;
 		//}
@@ -834,68 +833,19 @@ void surface_cut(std::string Path, base_type::Triangle_Soup_Mesh& meshCube, base
 			}
 		}
 		if (interFaceArray.size() != 0) {
-			insert_one_tri(meshCube, interFaceArray, f, interFaceDeleteArray, interFaceAddArray);
+			insert_one_tri(mesh1, interFaceArray, f, interFaceDeleteArray, interFaceAddArray);
 		}
 	}
+}
 
-	meshCube.save(Path, "outputCube");
-
-	std::vector<Object*> objects_meshCurve;
-	for (int i = 0; i < meshCurve.face_pool.size(); i++) {
-		auto f = (base_type::Face*)meshCurve.face_pool[i];
-		Object* obj = new Object{ computeAABB(*f), f };
-		objects_meshCurve.push_back(obj);
-	}
-
-	BVHNode* root_meshCurve = buildBVH(objects_meshCurve);
-
-	interFaceDeleteArray.clear();
-	interFaceAddArray.clear();
-
-	for (int i = 0; i < meshCube2.face_pool.size(); i++) {
-		auto f = (base_type::Face*)meshCube2.face_pool[i];
-		vector<Face*> interFaceArray;
-		bool DeleteFlag = false;
-		AABB_intersection(root_meshCurve, f, interFaceArray, interFaceDeleteArray, DeleteFlag);
-		//if (interFaceArray.size() == 0 && !DeleteFlag) {
-		//	continue;
-		//}
-		for (auto interFaceAdd : interFaceAddArray){
-			Vector3 p1, p2;
-			if (tri_tri_cut(interFaceAdd, f, p1, p2)) {
-				interFaceArray.push_back(interFaceAdd);
-			}
-		}
-
-		if (interFaceArray.size() != 0) {
-			insert_one_tri(meshCurve, interFaceArray, f, interFaceDeleteArray, interFaceAddArray);
-		}
-	}
-
-	meshCurve.save(Path, "outputCurve");
-
-	//step 2: depart mesh by special edge
-	auto get_unmarked_face = [](Triangle_Soup_Mesh& mesh) -> Face* {
-		for (int i = 0; i < mesh.face_pool.size(); i++) {
-			base_type::Face* f = (base_type::Face*)mesh.face_pool[i];
-			if (f->mark == false)
-				return f;
-		}
-		return nullptr;
-		};
-
-	clear_all_tri_mark(meshCube);
-	clear_all_tri_mark(meshCurve);
-
-	auto unmarked_face = get_unmarked_face(meshCube);
-	auto unmarked_face_Curve = get_unmarked_face(meshCurve);
-
-	int part_index = 0;
+void split_mesh_by_special_edge(base_type::Triangle_Soup_Mesh& mesh1, vector<base_type::Triangle_Soup_Mesh*>& meshResultArray) {
+	clear_all_tri_mark(mesh1);
+		auto unmarked_face = get_unmarked_face(mesh1);
+		int part_index = 0;
 	do {
-		std::vector<Face*> face_stack = { unmarked_face_Curve };
+		std::vector<Face*> face_stack = { unmarked_face };
 		std::vector<Face*> face_array;
-
-		while (!face_stack.empty()) {
+			while (!face_stack.empty()) {
 			auto back = face_stack.back();
 			face_stack.pop_back();
 			back->mark = true;
@@ -908,81 +858,90 @@ void surface_cut(std::string Path, base_type::Triangle_Soup_Mesh& meshCube, base
 				}
 			}
 		}
-
-		unmarked_face_Curve = get_unmarked_face(meshCurve);
-
-		Triangle_Soup_Mesh part;
-
-		for (auto f : face_array) {
-			//auto v1 = part.add_vtx(f->p1->position);
-			//auto v2 = part.add_vtx(f->p2->position);
-			//auto v3 = part.add_vtx(f->p3->position);
-			//part.add_face(v1, v2, v3);
-			auto v1 = Vertex::allocate_from_pool(&part.vertex_pool, f->p1->position);
-			auto v2 = Vertex::allocate_from_pool(&part.vertex_pool, f->p2->position);
-			auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
-			Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
-		}
-		if (part_index == index) {
-			meshCurve2.copy_no_edge(part);
-		}
-		part.save(Path, "output_Curve" + std::to_string(part_index++));
-	} while (unmarked_face_Curve);
-
-	//meshCurve2.load_from_file("D:/xmy/model/output_Curve1.obj");
-
-	part_index = 0;
-	do {
-		std::vector<Face*> face_stack = { unmarked_face };
-		std::vector<Face*> face_array;
-
-		while (!face_stack.empty()) {
-			auto back = face_stack.back();
-			face_stack.pop_back();
-			back->mark = true;
-			face_array.push_back(back);
-			for (int i = 0; i < 3; i++) {
-				if (back->disjoin_edge[i]->special == false) {
-					auto f = Face::get_disjoin_face(back, back->disjoin_edge[i]);
-					if (!f->mark)
-						face_stack.push_back(f);
-				}
+			unmarked_face = get_unmarked_face(mesh1);
+			Triangle_Soup_Mesh* part = new Triangle_Soup_Mesh();
+			for (auto f : face_array) {
+				//auto v1 = part.add_vtx(f->p1->position);
+				//auto v2 = part.add_vtx(f->p2->position);
+				//auto v3 = part.add_vtx(f->p3->position);
+				//part.add_face(v1, v2, v3);
+				auto v1 = Vertex::allocate_from_pool(&(*part).vertex_pool, f->p1->position);
+				auto v2 = Vertex::allocate_from_pool(&(*part).vertex_pool, f->p2->position);
+				auto v3 = Vertex::allocate_from_pool(&(*part).vertex_pool, f->p3->position);
+				Face::allocate_from_pool( &(*part).face_pool, v1, v2, v3);
 			}
-		}
-
-		unmarked_face = get_unmarked_face(meshCube);
-
-		Triangle_Soup_Mesh part;
-
-		for (auto f : face_array) {
-			//auto v1 = part.add_vtx(f->p1->position);
-			//auto v2 = part.add_vtx(f->p2->position);
-			//auto v3 = part.add_vtx(f->p3->position);
-			//part.add_face(v1, v2, v3);
-			auto v1 = Vertex::allocate_from_pool(&part.vertex_pool, f->p1->position);
-			auto v2 = Vertex::allocate_from_pool(&part.vertex_pool, f->p2->position);
-			auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
-			Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
-		}
-
-		for (int i = 0; i < meshCurve2.face_pool.size(); i++) {
-			auto f = (base_type::Face*)meshCurve2.face_pool[i];
-			//auto v1 = part.add_vtx(f->p1->position);
-			//auto v2 = part.add_vtx(f->p2->position);
-			//auto v3 = part.add_vtx(f->p3->position);
-			//part.add_face(v1, v2, v3);
-			auto v1 = Vertex::allocate_from_pool(&part.vertex_pool, f->p1->position);
-			auto v2 = Vertex::allocate_from_pool(&part.vertex_pool, f->p2->position);
-			auto v3 = Vertex::allocate_from_pool(&part.vertex_pool, f->p3->position);
-			Face::allocate_from_pool(&part.face_pool, v1, v2, v3);
-		}
-		meshResult.copy(part);
-		part.save(Path, "output_Cube" + std::to_string(part_index++));
+			meshResultArray.push_back(part);
+			//part.save(Path, "output_Curve" + std::to_string(part_index++));
 	} while (unmarked_face);
-
-	logger().info("end");
-
 }
 
+void splice_mesh(base_type::Triangle_Soup_Mesh& mesh1, base_type::Triangle_Soup_Mesh& mesh2) {
+	for (int i = 0; i < mesh1.face_pool.size(); i++) {
+		auto f = (base_type::Face*)mesh1.face_pool[i];
+		auto v1 = Vertex::allocate_from_pool(&mesh2.vertex_pool, f->p1->position);
+		auto v2 = Vertex::allocate_from_pool(&mesh2.vertex_pool, f->p2->position);
+		auto v3 = Vertex::allocate_from_pool(&mesh2.vertex_pool, f->p3->position);
+		Face::allocate_from_pool(&mesh2.face_pool, v1, v2, v3);
+	}
+}
 
+void surface_cut(std::string Path, base_type::Triangle_Soup_Mesh& meshCube, base_type::Triangle_Soup_Mesh& meshCurve, base_type::Triangle_Soup_Mesh& meshResult, int index1, int index2) {
+
+	logger().info("Compute Start");
+
+	Triangle_Soup_Mesh meshCube2;
+
+	meshCube2.copy(meshCube);
+
+	//step 1: use meshCurve to subdivide meshCube
+
+	mesh2_Cut_mesh1(meshCube, meshCurve);
+
+	meshCube.save(Path, "outputCube");
+
+	mesh2_Cut_mesh1(meshCurve, meshCube2);
+	meshCurve.save(Path, "outputCurve");
+
+	//step 2: split mesh by special edge
+
+	vector<base_type::Triangle_Soup_Mesh*> meshCubeResultArray;
+	split_mesh_by_special_edge(meshCube, meshCubeResultArray);
+	for (int i = 0; i < meshCubeResultArray.size(); i++) {
+		meshCubeResultArray[i]->save(Path, "output_Cube" + std::to_string(i));
+	}
+
+	vector<base_type::Triangle_Soup_Mesh*> meshCurveResultArray;
+	split_mesh_by_special_edge(meshCurve, meshCurveResultArray);
+	for (int i = 0; i < meshCurveResultArray.size(); i++) {
+		meshCurveResultArray[i]->save(Path, "output_Curve" + std::to_string(i));
+	}
+
+	if (meshCubeResultArray.size() != 0 && meshCurveResultArray.size() != 0) {
+		splice_mesh(*(meshCubeResultArray[index1]), *(meshCurveResultArray[index2]));
+	}
+	meshCubeResultArray[index1]->save(Path, "output_mesh");
+	meshResult.copy(*(meshCubeResultArray[index1]));
+
+	logger().info("end");
+}
+
+void surface_cut(base_type::Triangle_Soup_Mesh& meshCube, base_type::Triangle_Soup_Mesh& meshCurve, base_type::Triangle_Soup_Mesh& meshResult, int index1, int index2) {
+
+	Triangle_Soup_Mesh meshCube2;
+	meshCube2.copy(meshCube);
+
+	mesh2_Cut_mesh1(meshCube, meshCurve);
+	mesh2_Cut_mesh1(meshCurve, meshCube2);
+
+	vector<base_type::Triangle_Soup_Mesh*> meshCubeResultArray;
+	split_mesh_by_special_edge(meshCube, meshCubeResultArray);
+
+	vector<base_type::Triangle_Soup_Mesh*> meshCurveResultArray;
+	split_mesh_by_special_edge(meshCurve, meshCurveResultArray);
+
+	if (meshCubeResultArray.size() != 0 && meshCurveResultArray.size() != 0) {
+		splice_mesh(*(meshCubeResultArray[index1]), *(meshCurveResultArray[index2]));
+	}
+	meshResult.copy(*(meshCubeResultArray[index1]));
+}
 

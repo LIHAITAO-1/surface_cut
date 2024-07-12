@@ -66,10 +66,8 @@ int main(int argc, char **argv) {
 
 
     std::string Path = "D:/xmy/model/";
-    //std::string MeshFile =  "cube2.obj";
-    //std::string CurveFile = "curve6.obj";
-    std::string MeshFile =  "8-2.obj";//"cube2.obj";
-    std::string CurveFile =  "fm38.obj";//"curve6.obj";
+    std::string MeshFile =  "8-2.obj"; //"8-2.obj";//"cube2.obj";
+    std::string CurveFile = "curve7.obj";//"fm38.obj";//"curve6.obj";
 
 	base_type::Triangle_Soup_Mesh meshCube;
 	base_type::Triangle_Soup_Mesh meshCurve;
@@ -77,9 +75,10 @@ int main(int argc, char **argv) {
 
 	meshCube.load_from_file(Path + MeshFile);
 	meshCurve.load_from_file(Path + CurveFile);
-    int index = 1;
+    int index1 = 1;
+    int index2 = 0;
 
-    surface_cut(Path, meshCube, meshCurve, meshResult, index);
+    surface_cut(Path, meshCube, meshCurve, meshResult, index1, index2);
 
     return 0;
 }
